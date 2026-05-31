@@ -78,7 +78,7 @@ func (r *ingredientRepository) GetByID(ctx context.Context, id uint) (*domain.In
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.NewErrNotFound("Ингредиент не найден")
 		}
-		return nil, fmt.Errorf("Ошибка получения ингредиента по ID %d: %w", id, err)
+		return nil, fmt.Errorf("ошибка получения ингредиента по ID %d: %w", id, err)
 	}
 	ingredientDomain := toDomainIngredient(&ingredient)
 	return ingredientDomain, nil
@@ -98,11 +98,11 @@ func (r *ingredientRepository) Update(ctx context.Context, ingredient *domain.In
 	`
 	result, err := r.db.NamedExecContext(ctx, query, ingredient)
 	if err != nil {
-		return fmt.Errorf("Ошибка обновления ингредиента по ID %d: %w", ingredient.ID, err)
+		return fmt.Errorf("ошибка обновления ингредиента по ID %d: %w", ingredient.ID, err)
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("Ошибка получения количества обновленных строк: %w", err)
+		return fmt.Errorf("ошибка получения количества обновленных строк: %w", err)
 	}
 	if rowsAffected == 0 {
 		return domain.NewErrNotFound("Ингредиент не найден")
@@ -117,11 +117,11 @@ func (r *ingredientRepository) Delete(ctx context.Context, id uint) error {
 	`
 	result, err := r.db.NamedExecContext(ctx, query, map[string]any{"id": id})
 	if err != nil {
-		return fmt.Errorf("Ошибка удаления ингредиента по ID %d: %w", id, err)
+		return fmt.Errorf("ошибка удаления ингредиента по ID %d: %w", id, err)
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("Ошибка получения количества удаленных строк: %w", err)
+		return fmt.Errorf("ошибка получения количества удаленных строк: %w", err)
 	}
 	if rowsAffected == 0 {
 		return domain.NewErrNotFound("Ингредиент не найден")
@@ -146,7 +146,7 @@ func (r *ingredientRepository) List(ctx context.Context) ([]*domain.Ingredient, 
 	var ingredients []*models.Ingredient
 	err := r.db.SelectContext(ctx, &ingredients, query)
 	if err != nil {
-		return nil, fmt.Errorf("Ошибка получения списка ингредиентов: %w", err)
+		return nil, fmt.Errorf("ошибка получения списка ингредиентов: %w", err)
 	}
 	ingredientsDomain := make([]*domain.Ingredient, len(ingredients))
 	for i, ingredient := range ingredients {

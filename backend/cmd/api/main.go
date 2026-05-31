@@ -32,7 +32,7 @@ func initDB() (*sqlx.DB, error) {
 
 	if err := db.PingContext(ctx); err != nil {
 		log.Println("Не удалось подключиться к базе данных", err)
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 
@@ -45,7 +45,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Ошибка инициализации базы данных: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	ingredientRepository := repository.NewIngredientRepository(db)
 	ingredientService := services.NewIngredientService(ingredientRepository)
@@ -57,5 +57,7 @@ func main() {
 	router.POST("/ingredients", ingredientController.CreateIngredient)
 	// router.PATCH("/ingredients/:id", UpdateIngredient)
 	// router.DELETE("/ingredients/:id", DeleteIngredient)
-	router.Run(":8080")
+	if err := router.Run(":8080"); err != nil {
+		log.Fatalf("Ошибка запуска HTTP-сервера: %v", err)
+	}
 }

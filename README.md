@@ -1,5 +1,7 @@
 # База рецептов домашнего бара
 
+[![codecov](https://codecov.io/gh/redb0/mixologist/graph/badge.svg?token=DQS2DJ597M)](https://codecov.io/gh/redb0/mixologist)
+
 Веб-приложение ведения рецептов домашнего бара предназначено для управления
 рецептами коктейлей, а также для поиска коктейлей с нужными ингредиентами.
 

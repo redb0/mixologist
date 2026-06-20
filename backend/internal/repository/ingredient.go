@@ -78,7 +78,7 @@ func (r *ingredientRepository) GetByID(ctx context.Context, id uint) (*domain.In
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.NewErrNotFound("Ингредиент не найден")
 		}
-		return nil, fmt.Errorf("ошибка получения ингредиента по ID %d: %w", id, err)
+		return nil, ParseDBError(err)
 	}
 	ingredientDomain := toDomainIngredient(&ingredient)
 	return ingredientDomain, nil
@@ -98,7 +98,7 @@ func (r *ingredientRepository) Update(ctx context.Context, ingredient *domain.In
 	`
 	result, err := r.db.NamedExecContext(ctx, query, ingredient)
 	if err != nil {
-		return fmt.Errorf("ошибка обновления ингредиента по ID %d: %w", ingredient.ID, err)
+		return ParseDBError(err)
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {

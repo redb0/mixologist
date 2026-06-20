@@ -2,102 +2,25 @@ package repository
 
 import (
 	"context"
-	"log"
-	"os"
-	"path/filepath"
-	"sort"
+	"errors"
 	"testing"
-	"time"
 
-	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq"
 	"github.com/redb0/mixologist/internal/domain"
+	"github.com/redb0/mixologist/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
-
-type PostgresContainer struct {
-	*postgres.PostgresContainer
-	DB *sqlx.DB
-}
-
-func SetupContainerAndMigrations(ctx context.Context) (*PostgresContainer, error) {
-	pgContainer, err := postgres.Run(
-		ctx,
-		"postgres:17-alpine",
-		postgres.WithDatabase("mixologist_test"),
-		postgres.WithUsername("postgres"),
-		postgres.WithPassword("postgres"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(5*time.Second),
-		),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		_ = pgContainer.Terminate(ctx)
-		pgContainer = nil
-		return nil, err
-	}
-
-	testDB, err := sqlx.Connect("postgres", connStr)
-	if err != nil {
-		log.Println("ошибка при соединении с базой данных", err)
-		_ = pgContainer.Terminate(ctx)
-		pgContainer = nil
-		return nil, err
-	}
-
-	if err = applyMigrations(testDB); err != nil {
-		_ = testDB.Close()
-		testDB = nil
-		_ = pgContainer.Terminate(ctx)
-		pgContainer = nil
-		return nil, err
-	}
-	return &PostgresContainer{
-		PostgresContainer: pgContainer,
-		DB:                testDB,
-	}, nil
-}
-
-func applyMigrations(db *sqlx.DB) error {
-	migrationsDir := filepath.Join("..", "..", "migrations")
-	files, err := filepath.Glob(filepath.Join(migrationsDir, "*.up.sql"))
-	if err != nil {
-		return err
-	}
-	sort.Strings(files)
-
-	for _, migrationFile := range files {
-		sqlBytes, readErr := os.ReadFile(migrationFile)
-		if readErr != nil {
-			return readErr
-		}
-		if _, execErr := db.Exec(string(sqlBytes)); execErr != nil {
-			return execErr
-		}
-	}
-	return nil
-}
 
 type IngredientRepositoryTestSuite struct {
 	suite.Suite
-	pgContainer *PostgresContainer
+	pgContainer *testutil.PostgresContainer
 	repository  IngredientRepository
 	ctx         context.Context
 }
 
 func (suite *IngredientRepositoryTestSuite) SetupSuite() {
 	suite.ctx = context.Background()
-	pgContainer, err := SetupContainerAndMigrations(suite.ctx)
+	pgContainer, err := testutil.SetupContainerAndMigrations(suite.ctx)
 	if err != nil {
 		suite.T().Fatalf("Не удалось подготовить тестовую БД: %v", err)
 	}
@@ -106,7 +29,7 @@ func (suite *IngredientRepositoryTestSuite) SetupSuite() {
 }
 
 func (suite *IngredientRepositoryTestSuite) TearDownTest() {
-	_, err := suite.pgContainer.DB.Exec(`TRUNCATE TABLE ingredients RESTART IDENTITY CASCADE`)
+	err := testutil.TruncateIngredients(suite.pgContainer.DB)
 	if err != nil {
 		suite.T().Fatalf("Не удалось очистить таблицу ingredients: %v", err)
 	}
@@ -158,6 +81,43 @@ func (suite *IngredientRepositoryTestSuite) TestCreate() {
 	assert.Equal(t, ingredient.ABV, realIngredient.ABV)
 	assert.Equal(t, ingredient.IngredientType, realIngredient.IngredientType)
 	assert.Equal(t, ingredient.Icon, realIngredient.Icon)
+}
+
+func (suite *IngredientRepositoryTestSuite) TestGetByID_NotFound() {
+	t := suite.T()
+
+	ingredient, err := suite.repository.GetByID(suite.ctx, 42)
+	assert.Nil(t, ingredient)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
+}
+
+func (suite *IngredientRepositoryTestSuite) TestGetByID() {
+	t := suite.T()
+
+	createdIngredient, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Тестовый ингредиент",
+			Description:     "Описание ингредиента",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Free,
+			IngredientType:  domain.StrongPart,
+		},
+	)
+	assert.NoError(t, err)
+	assert.NotZero(t, createdIngredient.ID)
+	assert.NotZero(t, createdIngredient.CreatedAt)
+
+	ingredient, err := suite.repository.GetByID(suite.ctx, createdIngredient.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, createdIngredient.Name, ingredient.Name)
+	assert.Equal(t, createdIngredient.Description, ingredient.Description)
+	assert.Equal(t, createdIngredient.UnitMeasurement, ingredient.UnitMeasurement)
+	assert.Equal(t, createdIngredient.ABV, ingredient.ABV)
+	assert.Equal(t, createdIngredient.IngredientType, ingredient.IngredientType)
+	assert.Equal(t, createdIngredient.Icon, ingredient.Icon)
+	assert.Equal(t, createdIngredient.CreatedAt, ingredient.CreatedAt)
 }
 
 func TestIngredientRepositoryTestSuite(t *testing.T) {

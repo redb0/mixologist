@@ -1,0 +1,16 @@
+@baseUrl = http://localhost:8080
+
+### Create ingredient
+POST {{baseUrl}}/ingredients
+Content-Type: application/json
+
+{
+    "name": "Джин",
+    "description": "London dry gin",
+    "unit_measurement": "мл",
+    "abv": "крепкий",
+    "ingredient_type": "крепкая часть"
+}
+
+### Get ingredient by id
+GET {{baseUrl}}/ingredients/1

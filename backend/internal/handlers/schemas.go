@@ -14,12 +14,13 @@ type CreateIngredientRequest struct {
 	IngredientType  domain.IngredientTypeEnum  `json:"ingredient_type" binding:"required"`
 }
 
-type CreateIngredientResponse struct {
+type IngredientResponse struct {
 	ID              uint                       `json:"id"`
 	Name            string                     `json:"name"`
 	Description     string                     `json:"description"`
 	UnitMeasurement domain.UnitMeasurementEnum `json:"unit_measurement"`
 	ABV             domain.ABVEnum             `json:"abv"`
 	IngredientType  domain.IngredientTypeEnum  `json:"ingredient_type"`
+	HasIcon         bool                       `json:"has_icon"`
 	CreatedAt       time.Time                  `json:"created_at"`
 }

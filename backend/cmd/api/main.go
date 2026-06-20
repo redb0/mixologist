@@ -52,11 +52,11 @@ func main() {
 	ingredientController := handlers.NewIngredientController(ingredientService)
 
 	router := gin.Default()
-	// router.GET("/ingredients", GetIngredients)
-	// router.GET("/ingredients/:id", GetIngredient)
+	// router.GET("/ingredients", ingredientController.GetIngredients)
+	router.GET("/ingredients/:id", ingredientController.GetIngredient)
 	router.POST("/ingredients", ingredientController.CreateIngredient)
-	// router.PATCH("/ingredients/:id", UpdateIngredient)
-	// router.DELETE("/ingredients/:id", DeleteIngredient)
+	// router.PATCH("/ingredients/:id", ingredientController.UpdateIngredient)
+	// router.DELETE("/ingredients/:id", ingredientController.DeleteIngredient)
 	if err := router.Run(":8080"); err != nil {
 		log.Fatalf("Ошибка запуска HTTP-сервера: %v", err)
 	}

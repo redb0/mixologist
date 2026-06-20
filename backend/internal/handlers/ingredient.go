@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redb0/mixologist/internal/domain"
@@ -19,7 +20,23 @@ func NewIngredientController(service services.IngredientService) *IngredientCont
 
 func (c *IngredientController) GetIngredients(ctx *gin.Context) {}
 
-func (c *IngredientController) GetIngredient(ctx *gin.Context) {}
+func (c *IngredientController) GetIngredient(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "неверный ID ингредиента"})
+		return
+	}
+	ingredient, err := c.service.GetByID(ctx, uint(id))
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, toIngredientResponse(ingredient))
+}
 
 func (c *IngredientController) CreateIngredient(ctx *gin.Context) {
 	var ingredientRequest CreateIngredientRequest
@@ -48,16 +65,7 @@ func (c *IngredientController) CreateIngredient(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	ingredientResponse := CreateIngredientResponse{
-		ID:              ingredient.ID,
-		Name:            ingredient.Name,
-		Description:     ingredient.Description,
-		UnitMeasurement: ingredient.UnitMeasurement,
-		ABV:             ingredient.ABV,
-		IngredientType:  ingredient.IngredientType,
-		CreatedAt:       ingredient.CreatedAt,
-	}
-	ctx.JSON(http.StatusCreated, ingredientResponse)
+	ctx.JSON(http.StatusCreated, toIngredientResponse(ingredient))
 }
 
 func (c *IngredientController) UpdateIngredient(ctx *gin.Context) {}

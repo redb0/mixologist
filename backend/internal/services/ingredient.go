@@ -10,6 +10,7 @@ import (
 )
 
 type IngredientService interface {
+	GetByID(ctx context.Context, id uint) (*domain.Ingredient, error)
 	Create(
 		ctx context.Context,
 		name string,
@@ -23,6 +24,10 @@ type IngredientService interface {
 
 type ingredientService struct {
 	repo repository.IngredientRepository
+}
+
+func (s *ingredientService) GetByID(ctx context.Context, id uint) (*domain.Ingredient, error) {
+	return s.repo.GetByID(ctx, id)
 }
 
 func (s *ingredientService) Create(

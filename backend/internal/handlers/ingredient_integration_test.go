@@ -135,7 +135,7 @@ func (suite *IngredientHandlerTestSuite) TestGetIngredient_200() {
 			suite.Equal(createdIngredient.UnitMeasurement, response.UnitMeasurement)
 			suite.Equal(createdIngredient.ABV, response.ABV)
 			suite.Equal(createdIngredient.IngredientType, response.IngredientType)
-			suite.Equal(createdIngredient.CreatedAt, response.CreatedAt)
+			suite.True(createdIngredient.CreatedAt.Equal(response.CreatedAt))
 			suite.Equal(len(createdIngredient.Icon) > 0, response.HasIcon)
 		})
 	}

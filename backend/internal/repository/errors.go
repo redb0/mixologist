@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/lib/pq"
@@ -36,17 +36,20 @@ func ParseDBError(err error) error {
 
 	var pgErr *pq.Error
 	if errors.As(err, &pgErr) {
+		if pgErr.Detail != "" {
+			slog.Debug("postgres error detail", "code", string(pgErr.Code), "detail", pgErr.Detail)
+		}
 		switch pgErr.Code {
 		case "23505": // unique violation
-			return fmt.Errorf("%w: %s", domain.NewErrAlreadyExists("запись уже существует"), pgErr.Detail)
+			return domain.NewErrAlreadyExists("запись уже существует")
 		case "23503": // foreign key violation
-			return fmt.Errorf("%w: %s", ErrForeignKeyViolation, pgErr.Detail)
+			return ErrForeignKeyViolation
 		case "23514": // check violation
-			return fmt.Errorf("%w: %s", ErrCheckViolation, pgErr.Detail)
+			return ErrCheckViolation
 		case "40P01":
-			return fmt.Errorf("%w: %s", ErrDeadlock, pgErr.Detail)
+			return ErrDeadlock
 		case "57014": // query canceled (timeout)
-			return fmt.Errorf("%w: %s", ErrQueryCanceled, pgErr.Detail)
+			return ErrQueryCanceled
 		}
 	}
 

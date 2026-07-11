@@ -1,0 +1,6 @@
+.git
+.env
+coverage.*
+*.out
+*.test
+Dockerfile

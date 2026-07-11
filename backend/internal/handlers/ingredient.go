@@ -18,7 +18,14 @@ func NewIngredientController(service services.IngredientService) *IngredientCont
 	return &IngredientController{service: service}
 }
 
-func (c *IngredientController) GetIngredients(ctx *gin.Context) {}
+func (c *IngredientController) ListIngredients(ctx *gin.Context) {
+	ingredients, err := c.service.List(ctx)
+	if err != nil {
+		RespondError(ctx, err)
+		return
+	}
+	ctx.JSON(http.StatusOK, toIngredientsResponse(ingredients))
+}
 
 func (c *IngredientController) GetIngredient(ctx *gin.Context) {
 	id, err := parseIngredientID(ctx)

@@ -52,7 +52,7 @@ func main() {
 	ingredientController := handlers.NewIngredientController(ingredientService)
 
 	router := gin.Default()
-	// router.GET("/ingredients", ingredientController.GetIngredients)
+	router.GET("/ingredients", ingredientController.ListIngredients)
 	router.GET("/ingredients/:id", ingredientController.GetIngredient)
 	router.POST("/ingredients", ingredientController.CreateIngredient)
 	router.PATCH("/ingredients/:id", ingredientController.UpdateIngredient)

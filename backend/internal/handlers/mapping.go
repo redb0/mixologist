@@ -14,3 +14,11 @@ func toIngredientResponse(ingredient *domain.Ingredient) IngredientResponse {
 		CreatedAt:       ingredient.CreatedAt,
 	}
 }
+
+func toIngredientsResponse(ingredients []*domain.Ingredient) []IngredientResponse {
+	responses := make([]IngredientResponse, len(ingredients))
+	for i, ingredient := range ingredients {
+		responses[i] = toIngredientResponse(ingredient)
+	}
+	return responses
+}

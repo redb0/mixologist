@@ -41,6 +41,7 @@ func (suite *IngredientHandlerTestSuite) SetupSuite() {
 	controller := NewIngredientController(service)
 
 	suite.router = gin.New()
+	suite.router.GET("/ingredients", controller.ListIngredients)
 	suite.router.GET("/ingredients/:id", controller.GetIngredient)
 	suite.router.POST("/ingredients", controller.CreateIngredient)
 	suite.router.PATCH("/ingredients/:id", controller.UpdateIngredient)
@@ -65,6 +66,66 @@ func (suite *IngredientHandlerTestSuite) TearDownSuite() {
 	if err := suite.pgContainer.Terminate(suite.ctx); err != nil {
 		suite.T().Fatalf("Не удалось завершить контейнер postgres: %s", err)
 	}
+}
+
+func (suite *IngredientHandlerTestSuite) TestListIngredients_200_Empty() {
+	w := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/ingredients", nil)
+	suite.router.ServeHTTP(w, request)
+
+	suite.Equal(http.StatusOK, w.Code)
+
+	var response []IngredientResponse
+	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+	suite.Empty(response)
+	suite.Equal("[]", strings.TrimSpace(w.Body.String()))
+}
+
+func (suite *IngredientHandlerTestSuite) TestListIngredients_200() {
+	withIcon, err := suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Джин",
+		Description:     "С иконкой",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Strong,
+		IngredientType:  domain.StrongPart,
+		Icon:            []byte{1, 2, 3},
+	})
+	suite.Require().NoError(err)
+
+	withoutIcon, err := suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Ром",
+		Description:     "Без иконки",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Strong,
+		IngredientType:  domain.StrongPart,
+	})
+	suite.Require().NoError(err)
+
+	w := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/ingredients", nil)
+	suite.router.ServeHTTP(w, request)
+
+	suite.Equal(http.StatusOK, w.Code)
+
+	var response []IngredientResponse
+	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+	suite.Require().Len(response, 2)
+
+	// ORDER BY created_at DESC — последний созданный первым
+	suite.Equal(withoutIcon.ID, response[0].ID)
+	suite.Equal("Ром", response[0].Name)
+	suite.Equal("Без иконки", response[0].Description)
+	suite.Equal(domain.UnitMl, response[0].UnitMeasurement)
+	suite.Equal(domain.Strong, response[0].ABV)
+	suite.Equal(domain.StrongPart, response[0].IngredientType)
+	suite.False(response[0].HasIcon)
+	suite.False(response[0].CreatedAt.IsZero())
+
+	suite.Equal(withIcon.ID, response[1].ID)
+	suite.Equal("Джин", response[1].Name)
+	suite.Equal("С иконкой", response[1].Description)
+	suite.True(response[1].HasIcon)
+	suite.False(response[1].CreatedAt.IsZero())
 }
 
 func (suite *IngredientHandlerTestSuite) TestCreateIngredient_201() {

@@ -12,6 +12,9 @@ Content-Type: application/json
     "ingredient_type": "крепкая часть"
 }
 
+### List ingredients
+GET {{baseUrl}}/ingredients
+
 ### Get ingredient by id
 GET {{baseUrl}}/ingredients/1
 

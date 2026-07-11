@@ -12,6 +12,7 @@ import (
 
 type mockIngredientRepo struct {
 	getByID    func(ctx context.Context, id uint) (*domain.Ingredient, error)
+	create     func(ctx context.Context, ingredient *domain.Ingredient) (*domain.Ingredient, error)
 	update     func(ctx context.Context, ingredient *domain.Ingredient) error
 	updateIcon func(ctx context.Context, id uint, icon []byte) error
 	delete     func(ctx context.Context, id uint) error
@@ -25,7 +26,10 @@ func (m *mockIngredientRepo) GetByID(ctx context.Context, id uint) (*domain.Ingr
 }
 
 func (m *mockIngredientRepo) Create(ctx context.Context, ingredient *domain.Ingredient) (*domain.Ingredient, error) {
-	panic("unexpected call")
+	if m.create == nil {
+		panic("unexpected call to Create")
+	}
+	return m.create(ctx, ingredient)
 }
 
 func (m *mockIngredientRepo) Update(ctx context.Context, ingredient *domain.Ingredient) error {
@@ -95,6 +99,103 @@ func TestIngredientService_GetByID_NotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, domain.ErrNotFound))
 	assert.Nil(t, ingredient)
+}
+
+func TestIngredientService_Create(t *testing.T) {
+	var created *domain.Ingredient
+	repo := &mockIngredientRepo{
+		create: func(ctx context.Context, ingredient *domain.Ingredient) (*domain.Ingredient, error) {
+			created = ingredient
+			ingredient.ID = 1
+			return ingredient, nil
+		},
+	}
+	service := NewIngredientService(repo)
+
+	ingredient, err := service.Create(
+		context.Background(),
+		"Джин",
+		"London dry gin",
+		domain.UnitMl,
+		domain.Strong,
+		domain.StrongPart,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, uint(1), ingredient.ID)
+	assert.Equal(t, "Джин", ingredient.Name)
+	assert.Equal(t, "London dry gin", ingredient.Description)
+	assert.Equal(t, domain.UnitMl, ingredient.UnitMeasurement)
+	assert.Equal(t, domain.Strong, ingredient.ABV)
+	assert.Equal(t, domain.StrongPart, ingredient.IngredientType)
+	assert.Equal(t, "Джин", created.Name)
+	assert.Equal(t, "London dry gin", created.Description)
+	assert.Equal(t, domain.UnitMl, created.UnitMeasurement)
+	assert.Equal(t, domain.Strong, created.ABV)
+	assert.Equal(t, domain.StrongPart, created.IngredientType)
+}
+
+func TestIngredientService_Create_InvalidEnum(t *testing.T) {
+	service := NewIngredientService(&mockIngredientRepo{})
+
+	cases := []struct {
+		name            string
+		unitMeasurement domain.UnitMeasurementEnum
+		abv             domain.ABVEnum
+		ingredientType  domain.IngredientTypeEnum
+	}{
+		{
+			name:            "invalid unit",
+			unitMeasurement: domain.UnitMeasurementEnum("invalid"),
+			abv:             domain.Strong,
+			ingredientType:  domain.StrongPart,
+		},
+		{
+			name:            "invalid abv",
+			unitMeasurement: domain.UnitMl,
+			abv:             domain.ABVEnum("invalid"),
+			ingredientType:  domain.StrongPart,
+		},
+		{
+			name:            "invalid type",
+			unitMeasurement: domain.UnitMl,
+			abv:             domain.Strong,
+			ingredientType:  domain.IngredientTypeEnum("invalid"),
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			ingredient, err := service.Create(
+				context.Background(),
+				"Джин",
+				"описание",
+				tt.unitMeasurement,
+				tt.abv,
+				tt.ingredientType,
+			)
+			assert.Nil(t, ingredient)
+			assert.True(t, errors.Is(err, domain.ErrInvalidIngredientData))
+		})
+	}
+}
+
+func TestIngredientService_Create_RepoError(t *testing.T) {
+	repo := &mockIngredientRepo{
+		create: func(ctx context.Context, ingredient *domain.Ingredient) (*domain.Ingredient, error) {
+			return nil, domain.NewErrAlreadyExists("запись уже существует")
+		},
+	}
+	service := NewIngredientService(repo)
+
+	ingredient, err := service.Create(
+		context.Background(),
+		"Джин",
+		"London dry gin",
+		domain.UnitMl,
+		domain.Strong,
+		domain.StrongPart,
+	)
+	assert.Nil(t, ingredient)
+	assert.True(t, errors.Is(err, domain.ErrAlreadyExists))
 }
 
 func TestIngredientService_Update_SingleField(t *testing.T) {

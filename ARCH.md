@@ -43,7 +43,8 @@ backend/
 │   ├── handlers/                # HTTP-контроллеры и request/response DTO
 │   ├── models/                  # модели базы данных
 │   ├── repository/              # реализация доступа к БД
-│   └── services/                # бизнес-логика
+│   ├── services/                # бизнес-логика
+│   └── testutil/                # общие хелперы для интеграционных тестов
 └── migrations/                  # SQL-миграции
 ```
 

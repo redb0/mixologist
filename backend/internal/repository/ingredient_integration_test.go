@@ -83,6 +83,138 @@ func (suite *IngredientRepositoryTestSuite) TestCreate() {
 	assert.Equal(t, ingredient.Icon, realIngredient.Icon)
 }
 
+func (suite *IngredientRepositoryTestSuite) TestCreate_DuplicateName() {
+	t := suite.T()
+
+	_, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Джин",
+			Description:     "London dry gin",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Strong,
+			IngredientType:  domain.StrongPart,
+		},
+	)
+	assert.NoError(t, err)
+
+	ingredient, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Джин",
+			Description:     "Другой джин",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Strong,
+			IngredientType:  domain.StrongPart,
+		},
+	)
+	assert.Nil(t, ingredient)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrAlreadyExists))
+}
+
+func (suite *IngredientRepositoryTestSuite) TestCreate_MinimalFields() {
+	t := suite.T()
+
+	ingredient, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Тоник",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Free,
+			IngredientType:  domain.FreePart,
+		},
+	)
+	assert.NoError(t, err)
+	assert.NotZero(t, ingredient.ID)
+	assert.NotZero(t, ingredient.CreatedAt)
+
+	got, err := suite.repository.GetByID(suite.ctx, ingredient.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, "Тоник", got.Name)
+	assert.Empty(t, got.Description)
+	assert.Empty(t, got.Icon)
+	assert.Equal(t, domain.UnitMl, got.UnitMeasurement)
+	assert.Equal(t, domain.Free, got.ABV)
+	assert.Equal(t, domain.FreePart, got.IngredientType)
+}
+
+func (suite *IngredientRepositoryTestSuite) TestCreate_DuplicateName_DifferentCase() {
+	t := suite.T()
+
+	// Postgres UNIQUE(name) case-sensitive: "Джин" и "джин" — разные значения.
+	_, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Джин",
+			Description:     "С заглавной",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Strong,
+			IngredientType:  domain.StrongPart,
+		},
+	)
+	assert.NoError(t, err)
+
+	ingredient, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "джин",
+			Description:     "Со строчной",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Strong,
+			IngredientType:  domain.StrongPart,
+		},
+	)
+	assert.NoError(t, err)
+	assert.NotNil(t, ingredient)
+	assert.Equal(t, "джин", ingredient.Name)
+}
+
+func (suite *IngredientRepositoryTestSuite) TestList() {
+	t := suite.T()
+
+	first, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Джин",
+			Description:     "Первый",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Strong,
+			IngredientType:  domain.StrongPart,
+		},
+	)
+	assert.NoError(t, err)
+
+	second, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Ром",
+			Description:     "Второй",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Strong,
+			IngredientType:  domain.StrongPart,
+		},
+	)
+	assert.NoError(t, err)
+
+	list, err := suite.repository.List(suite.ctx)
+	assert.NoError(t, err)
+	assert.Len(t, list, 2)
+	// ORDER BY created_at DESC — последний созданный первым
+	assert.Equal(t, second.ID, list[0].ID)
+	assert.Equal(t, first.ID, list[1].ID)
+	assert.Equal(t, "Ром", list[0].Name)
+	assert.Equal(t, "Джин", list[1].Name)
+}
+
+func (suite *IngredientRepositoryTestSuite) TestList_Empty() {
+	t := suite.T()
+
+	list, err := suite.repository.List(suite.ctx)
+	assert.NoError(t, err)
+	assert.Empty(t, list)
+}
+
 func (suite *IngredientRepositoryTestSuite) TestGetByID_NotFound() {
 	t := suite.T()
 

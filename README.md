@@ -12,9 +12,33 @@
 | Зависимость                                                                         | Назначение                              |
 |-------------------------------------------------------------------------------------|-----------------------------------------|
 | Go 1.25+                                                                            | Сборка и запуск backend                 |
+| Node.js 24+ и npm                                                                   | Локальная разработка frontend           |
 | PostgreSQL 17+                                                                      | Основная база данных                    |
 | [golang-migrate](https://github.com/golang-migrate/migrate/tree/master/cmd/migrate) | Применение SQL-миграций                 |
 | Docker                                                                              | Для тестов или локального развертывания |
+
+## Запуск полного стека через Docker
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+После прохождения healthcheck административная панель доступна по адресу
+`http://localhost:8080`, API — через единый origin `http://localhost:8080/api`.
+Миграции применяются одноразовым сервисом `migrate` до запуска backend.
+
+Остановить стек:
+
+```bash
+docker compose down
+```
+
+Удалить также данные PostgreSQL:
+
+```bash
+docker compose down -v
+```
 
 ## Локальное развертывание
 
@@ -67,6 +91,18 @@ curl -X POST http://localhost:8080/ingredients \
     "ingredient_type": "крепкая часть"
   }'
 ```
+
+### 5. Запуск административного frontend
+
+Frontend использует Vite proxy `/api` на локальный backend `http://localhost:8080`:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Интерфейс доступен по адресу `http://localhost:5173`.
 
 ## Миграции
 
@@ -121,6 +157,16 @@ go test ./...
 
 Интеграционные тесты в `internal/repository/` поднимают PostgreSQL через **testcontainers** — нужен запущенный **Docker**.
 
+Frontend:
+
+```bash
+cd frontend
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
 ## TODO
 
 - [x] GET для ингридиента:
@@ -135,9 +181,9 @@ go test ./...
 - [x] Эндпоинт добавления иконки:
   - [x] API
   - [x] Тесты
-- [ ] Эндпоинт получения иконки:
-  - [ ] API
-  - [ ] Тесты
+- [x] Эндпоинт получения иконки:
+  - [x] API
+  - [x] Тесты
 - [x] Эндпоинт получения списка ингридиентов:
   - [x] API
   - [x] Тесты
@@ -149,6 +195,9 @@ go test ./...
 - [x] Тесты сервиса ингредиентов
 - [x] Тесты репозитория ингредиентов
 - [x] Тесты валидации перечислений
+- [x] Административный frontend ингредиентов
+- [x] Dockerfile для frontend и backend
+- [x] Docker Compose для PostgreSQL, миграций, backend и frontend
 
 Тех. долг:
 
@@ -157,3 +206,5 @@ go test ./...
 - [ ] Конкурентное обновление ингредиента
 - [ ] Пагинация списка ингридиентов через курсор
 - [ ] Кеширование ингридиентов?
+- [ ] Фильтрация ингридиентов
+- [ ] Парсинг ошибок в List репозитория ингридиентов не единообразен

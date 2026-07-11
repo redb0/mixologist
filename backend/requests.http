@@ -14,3 +14,12 @@ Content-Type: application/json
 
 ### Get ingredient by id
 GET {{baseUrl}}/ingredients/1
+
+### Partial update ingredient
+PATCH {{baseUrl}}/ingredients/1
+Content-Type: application/json
+
+{
+    "name": "Джин London Dry",
+    "description": "Обновлённое описание"
+}

@@ -120,6 +120,86 @@ func (suite *IngredientRepositoryTestSuite) TestGetByID() {
 	assert.Equal(t, createdIngredient.CreatedAt, ingredient.CreatedAt)
 }
 
+func (suite *IngredientRepositoryTestSuite) TestUpdate() {
+	t := suite.T()
+
+	created, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Джин",
+			Description:     "Старое описание",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Strong,
+			IngredientType:  domain.StrongPart,
+			Icon:            []byte{1, 2, 3},
+		},
+	)
+	assert.NoError(t, err)
+
+	created.Name = "Джин London Dry"
+	created.Description = "Новое описание"
+	created.ABV = domain.Low
+	err = suite.repository.Update(suite.ctx, created)
+	assert.NoError(t, err)
+
+	updated, err := suite.repository.GetByID(suite.ctx, created.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, "Джин London Dry", updated.Name)
+	assert.Equal(t, "Новое описание", updated.Description)
+	assert.Equal(t, domain.UnitMl, updated.UnitMeasurement)
+	assert.Equal(t, domain.Low, updated.ABV)
+	assert.Equal(t, domain.StrongPart, updated.IngredientType)
+	assert.Equal(t, []byte{1, 2, 3}, updated.Icon)
+}
+
+func (suite *IngredientRepositoryTestSuite) TestUpdate_NotFound() {
+	t := suite.T()
+
+	err := suite.repository.Update(suite.ctx, &domain.Ingredient{
+		ID:              42,
+		Name:            "Несуществующий",
+		Description:     "Описание",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Free,
+		IngredientType:  domain.Other,
+	})
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
+}
+
+func (suite *IngredientRepositoryTestSuite) TestUpdate_DuplicateName() {
+	t := suite.T()
+
+	_, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Ром",
+			Description:     "Белый ром",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Strong,
+			IngredientType:  domain.StrongPart,
+		},
+	)
+	assert.NoError(t, err)
+
+	vodka, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Водка",
+			Description:     "Чистая водка",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Strong,
+			IngredientType:  domain.StrongPart,
+		},
+	)
+	assert.NoError(t, err)
+
+	vodka.Name = "Ром"
+	err = suite.repository.Update(suite.ctx, vodka)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrAlreadyExists))
+}
+
 func TestIngredientRepositoryTestSuite(t *testing.T) {
 	suite.Run(t, new(IngredientRepositoryTestSuite))
 }

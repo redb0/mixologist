@@ -14,6 +14,14 @@ type CreateIngredientRequest struct {
 	IngredientType  domain.IngredientTypeEnum  `json:"ingredient_type" binding:"required"`
 }
 
+type UpdateIngredientRequest struct {
+	Name            *string                     `json:"name" binding:"omitempty,min=3,max=512"`
+	Description     *string                     `json:"description" binding:"omitempty,max=1024"`
+	UnitMeasurement *domain.UnitMeasurementEnum `json:"unit_measurement"`
+	ABV             *domain.ABVEnum             `json:"abv"`
+	IngredientType  *domain.IngredientTypeEnum  `json:"ingredient_type"`
+}
+
 type IngredientResponse struct {
 	ID              uint                       `json:"id"`
 	Name            string                     `json:"name"`

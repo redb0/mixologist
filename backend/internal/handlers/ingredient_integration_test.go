@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -39,6 +40,7 @@ func (suite *IngredientHandlerTestSuite) SetupSuite() {
 
 	suite.router = gin.New()
 	suite.router.GET("/ingredients/:id", controller.GetIngredient)
+	suite.router.PATCH("/ingredients/:id", controller.UpdateIngredient)
 }
 
 func (suite *IngredientHandlerTestSuite) TearDownTest() {
@@ -139,6 +141,176 @@ func (suite *IngredientHandlerTestSuite) TestGetIngredient_200() {
 			suite.Equal(len(createdIngredient.Icon) > 0, response.HasIcon)
 		})
 	}
+}
+
+func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_200() {
+	created, err := suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Джин",
+		Description:     "Старое описание",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Strong,
+		IngredientType:  domain.StrongPart,
+	})
+	suite.Require().NoError(err)
+
+	body := `{"name":"Джин London Dry","description":"Новое описание"}`
+	w := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPatch,
+		"/ingredients/"+strconv.Itoa(int(created.ID)),
+		bytes.NewBufferString(body),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	suite.router.ServeHTTP(w, request)
+
+	suite.Equal(http.StatusOK, w.Code)
+
+	var response IngredientResponse
+	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+	suite.Equal(created.ID, response.ID)
+	suite.Equal("Джин London Dry", response.Name)
+	suite.Equal("Новое описание", response.Description)
+	suite.Equal(domain.UnitMl, response.UnitMeasurement)
+	suite.Equal(domain.Strong, response.ABV)
+	suite.Equal(domain.StrongPart, response.IngredientType)
+	suite.False(response.HasIcon)
+}
+
+func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_200_SameName() {
+	created, err := suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Джин",
+		Description:     "Старое описание",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Strong,
+		IngredientType:  domain.StrongPart,
+	})
+	suite.Require().NoError(err)
+
+	body := `{"name":"Джин"}`
+	w := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPatch,
+		"/ingredients/"+strconv.Itoa(int(created.ID)),
+		bytes.NewBufferString(body),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	suite.router.ServeHTTP(w, request)
+
+	suite.Equal(http.StatusOK, w.Code)
+
+	var response IngredientResponse
+	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+	suite.Equal(created.ID, response.ID)
+	suite.Equal(created.Name, response.Name)
+	suite.Equal(created.Description, response.Description)
+	suite.Equal(created.UnitMeasurement, response.UnitMeasurement)
+	suite.Equal(created.ABV, response.ABV)
+	suite.Equal(created.IngredientType, response.IngredientType)
+	suite.False(response.HasIcon)
+}
+
+func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_400_InvalidID() {
+	w := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPatch,
+		"/ingredients/invalid",
+		bytes.NewBufferString(`{"name":"Джин London Dry"}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	suite.router.ServeHTTP(w, request)
+
+	suite.Equal(http.StatusBadRequest, w.Code)
+
+	var response gin.H
+	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+	suite.NotEmpty(response["error"])
+}
+
+func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_400() {
+	created, err := suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Джин",
+		Description:     "Описание",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Strong,
+		IngredientType:  domain.StrongPart,
+	})
+	suite.Require().NoError(err)
+
+	path := "/ingredients/" + strconv.Itoa(int(created.ID))
+	cases := []struct {
+		name string
+		body string
+	}{
+		{name: "empty body", body: `{}`},
+		{name: "bad json", body: `{`},
+		{name: "invalid enum", body: `{"unit_measurement":"invalid"}`},
+		{name: "empty name", body: `{"name":""}`},
+		{name: "short name", body: `{"name":"ab"}`},
+	}
+	for _, tt := range cases {
+		suite.Run(tt.name, func() {
+			w := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPatch, path, bytes.NewBufferString(tt.body))
+			request.Header.Set("Content-Type", "application/json")
+			suite.router.ServeHTTP(w, request)
+
+			suite.Equal(http.StatusBadRequest, w.Code)
+
+			var response gin.H
+			suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+			suite.NotEmpty(response["error"])
+		})
+	}
+}
+
+func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_404() {
+	body := `{"name":"Несуществующий"}`
+	w := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPatch, "/ingredients/42", bytes.NewBufferString(body))
+	request.Header.Set("Content-Type", "application/json")
+	suite.router.ServeHTTP(w, request)
+
+	suite.Equal(http.StatusNotFound, w.Code)
+
+	var response gin.H
+	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+	suite.Equal("Ингредиент не найден", response["error"])
+}
+
+func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_409() {
+	_, err := suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Ром",
+		Description:     "Белый ром",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Strong,
+		IngredientType:  domain.StrongPart,
+	})
+	suite.Require().NoError(err)
+
+	vodka, err := suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Водка",
+		Description:     "Чистая водка",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Strong,
+		IngredientType:  domain.StrongPart,
+	})
+	suite.Require().NoError(err)
+
+	body := `{"name":"Ром"}`
+	w := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPatch,
+		"/ingredients/"+strconv.Itoa(int(vodka.ID)),
+		bytes.NewBufferString(body),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	suite.router.ServeHTTP(w, request)
+
+	suite.Equal(http.StatusConflict, w.Code)
+
+	var response gin.H
+	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+	suite.Contains(response["error"], "запись уже существует")
 }
 
 func TestIngredientHandlerTestSuite(t *testing.T) {

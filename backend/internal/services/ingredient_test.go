@@ -13,6 +13,7 @@ import (
 type mockIngredientRepo struct {
 	getByID func(ctx context.Context, id uint) (*domain.Ingredient, error)
 	update  func(ctx context.Context, ingredient *domain.Ingredient) error
+	delete  func(ctx context.Context, id uint) error
 }
 
 func (m *mockIngredientRepo) GetByID(ctx context.Context, id uint) (*domain.Ingredient, error) {
@@ -34,7 +35,10 @@ func (m *mockIngredientRepo) Update(ctx context.Context, ingredient *domain.Ingr
 }
 
 func (m *mockIngredientRepo) Delete(ctx context.Context, id uint) error {
-	panic("unexpected call")
+	if m.delete == nil {
+		panic("unexpected call to Delete")
+	}
+	return m.delete(ctx, id)
 }
 
 func (m *mockIngredientRepo) List(ctx context.Context) ([]*domain.Ingredient, error) {
@@ -188,4 +192,31 @@ func TestIngredientService_Update_DuplicateName(t *testing.T) {
 	})
 	assert.Nil(t, ingredient)
 	assert.True(t, errors.Is(err, domain.ErrAlreadyExists))
+}
+
+func TestIngredientService_Delete(t *testing.T) {
+	var deletedID uint
+	repo := &mockIngredientRepo{
+		delete: func(ctx context.Context, id uint) error {
+			deletedID = id
+			return nil
+		},
+	}
+	service := NewIngredientService(repo)
+
+	err := service.Delete(context.Background(), 7)
+	assert.NoError(t, err)
+	assert.Equal(t, uint(7), deletedID)
+}
+
+func TestIngredientService_Delete_NotFound(t *testing.T) {
+	repo := &mockIngredientRepo{
+		delete: func(ctx context.Context, id uint) error {
+			return domain.NewErrNotFound("Ингредиент не найден")
+		},
+	}
+	service := NewIngredientService(repo)
+
+	err := service.Delete(context.Background(), 42)
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
 }

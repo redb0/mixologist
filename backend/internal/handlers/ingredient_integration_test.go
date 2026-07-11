@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -41,6 +42,7 @@ func (suite *IngredientHandlerTestSuite) SetupSuite() {
 	suite.router = gin.New()
 	suite.router.GET("/ingredients/:id", controller.GetIngredient)
 	suite.router.PATCH("/ingredients/:id", controller.UpdateIngredient)
+	suite.router.DELETE("/ingredients/:id", controller.DeleteIngredient)
 }
 
 func (suite *IngredientHandlerTestSuite) TearDownTest() {
@@ -311,6 +313,66 @@ func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_409() {
 	var response gin.H
 	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
 	suite.Contains(response["error"], "запись уже существует")
+}
+
+func (suite *IngredientHandlerTestSuite) TestDeleteIngredient_204() {
+	created, err := suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Джин",
+		Description:     "London dry gin",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Strong,
+		IngredientType:  domain.StrongPart,
+	})
+	suite.Require().NoError(err)
+
+	w := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodDelete,
+		"/ingredients/"+strconv.Itoa(int(created.ID)),
+		nil,
+	)
+	suite.router.ServeHTTP(w, request)
+
+	suite.Equal(http.StatusNoContent, w.Code)
+	suite.Empty(w.Body.Bytes())
+
+	_, err = suite.repository.GetByID(suite.ctx, created.ID)
+	suite.True(errors.Is(err, domain.ErrNotFound))
+}
+
+func (suite *IngredientHandlerTestSuite) TestDeleteIngredient_400() {
+	cases := []struct {
+		name string
+		path string
+	}{
+		{name: "not a number", path: "/ingredients/not-a-number"},
+		{name: "zero", path: "/ingredients/0"},
+	}
+	for _, tt := range cases {
+		suite.Run(tt.name, func() {
+			w := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodDelete, tt.path, nil)
+			suite.router.ServeHTTP(w, request)
+
+			suite.Equal(http.StatusBadRequest, w.Code)
+
+			var response gin.H
+			suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+			suite.Equal("неверный ID ингредиента", response["error"])
+		})
+	}
+}
+
+func (suite *IngredientHandlerTestSuite) TestDeleteIngredient_404() {
+	w := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodDelete, "/ingredients/42", nil)
+	suite.router.ServeHTTP(w, request)
+
+	suite.Equal(http.StatusNotFound, w.Code)
+
+	var response gin.H
+	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+	suite.Equal("Ингредиент не найден", response["error"])
 }
 
 func TestIngredientHandlerTestSuite(t *testing.T) {

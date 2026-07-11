@@ -28,6 +28,7 @@ type IngredientService interface {
 		ingredientType domain.IngredientTypeEnum,
 	) (*domain.Ingredient, error)
 	Update(ctx context.Context, id uint, patch UpdateIngredientPatch) (*domain.Ingredient, error)
+	Delete(ctx context.Context, id uint) error
 	SetIcon(ctx context.Context, id uint, icon []byte) error
 }
 
@@ -98,6 +99,10 @@ func (s *ingredientService) Update(ctx context.Context, id uint, patch UpdateIng
 		return nil, err
 	}
 	return ingredient, nil
+}
+
+func (s *ingredientService) Delete(ctx context.Context, id uint) error {
+	return s.repo.Delete(ctx, id)
 }
 
 func (s *ingredientService) SetIcon(ctx context.Context, id uint, icon []byte) error {

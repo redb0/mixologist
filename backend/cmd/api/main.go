@@ -50,10 +50,13 @@ func main() {
 	ingredientRepository := repository.NewIngredientRepository(db)
 	ingredientService := services.NewIngredientService(ingredientRepository)
 	ingredientController := handlers.NewIngredientController(ingredientService)
+	healthController := handlers.NewHealthController(db)
 
 	router := gin.Default()
+	router.GET("/health", healthController.GetHealth)
 	router.GET("/ingredients", ingredientController.ListIngredients)
 	router.GET("/ingredients/:id", ingredientController.GetIngredient)
+	router.GET("/ingredients/:id/icon", ingredientController.GetIngredientIcon)
 	router.POST("/ingredients", ingredientController.CreateIngredient)
 	router.PATCH("/ingredients/:id", ingredientController.UpdateIngredient)
 	router.DELETE("/ingredients/:id", ingredientController.DeleteIngredient)

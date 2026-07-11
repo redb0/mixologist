@@ -23,3 +23,6 @@ Content-Type: application/json
     "name": "Джин London Dry",
     "description": "Обновлённое описание"
 }
+
+### Delete ingredient
+DELETE {{baseUrl}}/ingredients/1

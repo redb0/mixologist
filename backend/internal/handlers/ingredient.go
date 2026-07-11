@@ -10,6 +10,8 @@ import (
 	"github.com/redb0/mixologist/internal/services"
 )
 
+const ingredientIconCacheControl = "public, max-age=300, must-revalidate"
+
 type IngredientController struct {
 	service services.IngredientService
 }
@@ -53,6 +55,7 @@ func (c *IngredientController) GetIngredientIcon(ctx *gin.Context) {
 		return
 	}
 	ctx.Header("Content-Length", strconv.Itoa(len(icon)))
+	ctx.Header("Cache-Control", ingredientIconCacheControl)
 	ctx.Data(http.StatusOK, http.DetectContentType(icon), icon)
 }
 

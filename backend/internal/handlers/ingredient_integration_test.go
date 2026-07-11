@@ -147,6 +147,7 @@ func (suite *IngredientHandlerTestSuite) TestGetIngredientIcon_200() {
 	suite.Equal(http.StatusOK, w.Code)
 	suite.Equal("image/png", w.Header().Get("Content-Type"))
 	suite.Equal(strconv.Itoa(len(icon)), w.Header().Get("Content-Length"))
+	suite.Equal(ingredientIconCacheControl, w.Header().Get("Cache-Control"))
 	suite.Equal(icon, w.Body.Bytes())
 }
 

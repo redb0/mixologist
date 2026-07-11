@@ -1,5 +1,8 @@
 @baseUrl = http://localhost:8080
 
+### Health check
+GET {{baseUrl}}/health
+
 ### Create ingredient
 POST {{baseUrl}}/ingredients
 Content-Type: application/json
@@ -17,6 +20,9 @@ GET {{baseUrl}}/ingredients
 
 ### Get ingredient by id
 GET {{baseUrl}}/ingredients/1
+
+### Get ingredient icon
+GET {{baseUrl}}/ingredients/1/icon
 
 ### Partial update ingredient
 PATCH {{baseUrl}}/ingredients/1

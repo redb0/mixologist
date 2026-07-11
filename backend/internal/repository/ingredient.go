@@ -117,7 +117,7 @@ func (r *ingredientRepository) Delete(ctx context.Context, id uint) error {
 	`
 	result, err := r.db.NamedExecContext(ctx, query, map[string]any{"id": id})
 	if err != nil {
-		return fmt.Errorf("ошибка удаления ингредиента по ID %d: %w", id, err)
+		return ParseDBError(err)
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {

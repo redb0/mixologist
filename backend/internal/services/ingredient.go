@@ -21,7 +21,6 @@ type UpdateIngredientPatch struct {
 }
 
 type IngredientService interface {
-	GetByID(ctx context.Context, id uint) (*domain.Ingredient, error)
 	Create(
 		ctx context.Context,
 		name string,
@@ -30,9 +29,11 @@ type IngredientService interface {
 		abv domain.ABVEnum,
 		ingredientType domain.IngredientTypeEnum,
 	) (*domain.Ingredient, error)
+	GetByID(ctx context.Context, id uint) (*domain.Ingredient, error)
 	Update(ctx context.Context, id uint, patch UpdateIngredientPatch) (*domain.Ingredient, error)
-	Delete(ctx context.Context, id uint) error
 	SetIcon(ctx context.Context, id uint, icon []byte) error
+	Delete(ctx context.Context, id uint) error
+	List(ctx context.Context) ([]*domain.Ingredient, error)
 }
 
 type ingredientService struct {
@@ -120,6 +121,10 @@ func (s *ingredientService) SetIcon(ctx context.Context, id uint, icon []byte) e
 	}
 
 	return s.repo.UpdateIcon(ctx, id, icon)
+}
+
+func (s *ingredientService) List(ctx context.Context) ([]*domain.Ingredient, error) {
+	return s.repo.List(ctx)
 }
 
 func isAllowedIconFormat(icon []byte) bool {

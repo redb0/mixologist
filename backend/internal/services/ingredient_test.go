@@ -16,6 +16,7 @@ type mockIngredientRepo struct {
 	update     func(ctx context.Context, ingredient *domain.Ingredient) error
 	updateIcon func(ctx context.Context, id uint, icon []byte) error
 	delete     func(ctx context.Context, id uint) error
+	list       func(ctx context.Context) ([]*domain.Ingredient, error)
 }
 
 func (m *mockIngredientRepo) GetByID(ctx context.Context, id uint) (*domain.Ingredient, error) {
@@ -54,7 +55,10 @@ func (m *mockIngredientRepo) Delete(ctx context.Context, id uint) error {
 }
 
 func (m *mockIngredientRepo) List(ctx context.Context) ([]*domain.Ingredient, error) {
-	panic("unexpected call")
+	if m.list == nil {
+		panic("unexpected call to List")
+	}
+	return m.list(ctx)
 }
 
 func ptr[T any](v T) *T {
@@ -404,4 +408,52 @@ func TestIngredientService_SetIcon_NotFound(t *testing.T) {
 
 	err := service.SetIcon(context.Background(), 42, []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A})
 	assert.True(t, errors.Is(err, domain.ErrNotFound))
+}
+
+func TestIngredientService_List(t *testing.T) {
+	expected := []*domain.Ingredient{
+		sampleIngredient(2),
+		sampleIngredient(1),
+	}
+	repo := &mockIngredientRepo{
+		list: func(ctx context.Context) ([]*domain.Ingredient, error) {
+			return expected, nil
+		},
+	}
+	service := NewIngredientService(repo)
+
+	list, err := service.List(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, expected, list)
+	assert.Len(t, list, 2)
+	assert.Equal(t, uint(2), list[0].ID)
+	assert.Equal(t, uint(1), list[1].ID)
+}
+
+func TestIngredientService_List_Empty(t *testing.T) {
+	repo := &mockIngredientRepo{
+		list: func(ctx context.Context) ([]*domain.Ingredient, error) {
+			return []*domain.Ingredient{}, nil
+		},
+	}
+	service := NewIngredientService(repo)
+
+	list, err := service.List(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, list)
+	assert.NotNil(t, list)
+}
+
+func TestIngredientService_List_RepoError(t *testing.T) {
+	repoErr := errors.New("db unavailable")
+	repo := &mockIngredientRepo{
+		list: func(ctx context.Context) ([]*domain.Ingredient, error) {
+			return nil, repoErr
+		},
+	}
+	service := NewIngredientService(repo)
+
+	list, err := service.List(context.Background())
+	assert.Nil(t, list)
+	assert.ErrorIs(t, err, repoErr)
 }

@@ -43,6 +43,7 @@ func (suite *IngredientHandlerTestSuite) SetupSuite() {
 	suite.router = gin.New()
 	suite.router.GET("/ingredients", controller.ListIngredients)
 	suite.router.GET("/ingredients/:id", controller.GetIngredient)
+	suite.router.GET("/ingredients/:id/icon", controller.GetIngredientIcon)
 	suite.router.POST("/ingredients", controller.CreateIngredient)
 	suite.router.PATCH("/ingredients/:id", controller.UpdateIngredient)
 	suite.router.DELETE("/ingredients/:id", controller.DeleteIngredient)
@@ -126,6 +127,62 @@ func (suite *IngredientHandlerTestSuite) TestListIngredients_200() {
 	suite.Equal("С иконкой", response[1].Description)
 	suite.True(response[1].HasIcon)
 	suite.False(response[1].CreatedAt.IsZero())
+}
+
+func (suite *IngredientHandlerTestSuite) TestGetIngredientIcon_200() {
+	icon := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
+	ingredient, err := suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Джин",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Strong,
+		IngredientType:  domain.StrongPart,
+		Icon:            icon,
+	})
+	suite.Require().NoError(err)
+
+	w := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/ingredients/"+strconv.Itoa(int(ingredient.ID))+"/icon", nil)
+	suite.router.ServeHTTP(w, request)
+
+	suite.Equal(http.StatusOK, w.Code)
+	suite.Equal("image/png", w.Header().Get("Content-Type"))
+	suite.Equal(strconv.Itoa(len(icon)), w.Header().Get("Content-Length"))
+	suite.Equal(icon, w.Body.Bytes())
+}
+
+func (suite *IngredientHandlerTestSuite) TestGetIngredientIcon_404_Empty() {
+	ingredient, err := suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Тоник",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Free,
+		IngredientType:  domain.FreePart,
+	})
+	suite.Require().NoError(err)
+
+	w := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/ingredients/"+strconv.Itoa(int(ingredient.ID))+"/icon", nil)
+	suite.router.ServeHTTP(w, request)
+
+	suite.Equal(http.StatusNotFound, w.Code)
+	suite.JSONEq(`{"error":"Иконка ингредиента не найдена"}`, w.Body.String())
+}
+
+func (suite *IngredientHandlerTestSuite) TestGetIngredientIcon_404_IngredientNotFound() {
+	w := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/ingredients/42/icon", nil)
+	suite.router.ServeHTTP(w, request)
+
+	suite.Equal(http.StatusNotFound, w.Code)
+	suite.JSONEq(`{"error":"Ингредиент не найден"}`, w.Body.String())
+}
+
+func (suite *IngredientHandlerTestSuite) TestGetIngredientIcon_400_InvalidID() {
+	w := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/ingredients/invalid/icon", nil)
+	suite.router.ServeHTTP(w, request)
+
+	suite.Equal(http.StatusBadRequest, w.Code)
+	suite.JSONEq(`{"error":"неверный ID ингредиента"}`, w.Body.String())
 }
 
 func (suite *IngredientHandlerTestSuite) TestCreateIngredient_201() {

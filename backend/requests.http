@@ -26,3 +26,9 @@ Content-Type: application/json
 
 ### Delete ingredient
 DELETE {{baseUrl}}/ingredients/1
+
+### Set ingredient icon
+PUT {{baseUrl}}/ingredients/1/icon
+Content-Type: application/octet-stream
+
+< ./icon.png

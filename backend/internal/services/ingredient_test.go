@@ -11,9 +11,10 @@ import (
 )
 
 type mockIngredientRepo struct {
-	getByID func(ctx context.Context, id uint) (*domain.Ingredient, error)
-	update  func(ctx context.Context, ingredient *domain.Ingredient) error
-	delete  func(ctx context.Context, id uint) error
+	getByID    func(ctx context.Context, id uint) (*domain.Ingredient, error)
+	update     func(ctx context.Context, ingredient *domain.Ingredient) error
+	updateIcon func(ctx context.Context, id uint, icon []byte) error
+	delete     func(ctx context.Context, id uint) error
 }
 
 func (m *mockIngredientRepo) GetByID(ctx context.Context, id uint) (*domain.Ingredient, error) {
@@ -32,6 +33,13 @@ func (m *mockIngredientRepo) Update(ctx context.Context, ingredient *domain.Ingr
 		panic("unexpected call to Update")
 	}
 	return m.update(ctx, ingredient)
+}
+
+func (m *mockIngredientRepo) UpdateIcon(ctx context.Context, id uint, icon []byte) error {
+	if m.updateIcon == nil {
+		panic("unexpected call to UpdateIcon")
+	}
+	return m.updateIcon(ctx, id, icon)
 }
 
 func (m *mockIngredientRepo) Delete(ctx context.Context, id uint) error {
@@ -218,5 +226,81 @@ func TestIngredientService_Delete_NotFound(t *testing.T) {
 	service := NewIngredientService(repo)
 
 	err := service.Delete(context.Background(), 42)
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
+}
+
+func TestIngredientService_SetIcon(t *testing.T) {
+	cases := []struct {
+		name string
+		icon []byte
+	}{
+		{name: "png", icon: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}},
+		{name: "jpeg", icon: []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46}},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotID uint
+			var gotIcon []byte
+			repo := &mockIngredientRepo{
+				updateIcon: func(ctx context.Context, id uint, icon []byte) error {
+					gotID = id
+					gotIcon = icon
+					return nil
+				},
+			}
+			service := NewIngredientService(repo)
+
+			err := service.SetIcon(context.Background(), 1, tt.icon)
+			require.NoError(t, err)
+			assert.Equal(t, uint(1), gotID)
+			assert.Equal(t, tt.icon, gotIcon)
+		})
+	}
+}
+
+func TestIngredientService_SetIcon_Empty(t *testing.T) {
+	service := NewIngredientService(&mockIngredientRepo{})
+
+	err := service.SetIcon(context.Background(), 1, nil)
+	assert.True(t, errors.Is(err, domain.ErrInvalidIngredientData))
+	assert.Equal(t, "иконка не может быть пустой", err.Error())
+}
+
+func TestIngredientService_SetIcon_TooLarge(t *testing.T) {
+	service := NewIngredientService(&mockIngredientRepo{})
+
+	err := service.SetIcon(context.Background(), 1, make([]byte, MaxIconSize+1))
+	assert.True(t, errors.Is(err, domain.ErrInvalidIngredientData))
+	assert.Equal(t, "иконка слишком большая (макс. 512 KB)", err.Error())
+}
+
+func TestIngredientService_SetIcon_InvalidFormat(t *testing.T) {
+	service := NewIngredientService(&mockIngredientRepo{})
+
+	cases := []struct {
+		name string
+		icon []byte
+	}{
+		{name: "gif", icon: []byte("GIF89a")},
+		{name: "raw", icon: []byte{1, 2, 3}},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			err := service.SetIcon(context.Background(), 1, tt.icon)
+			assert.True(t, errors.Is(err, domain.ErrInvalidIngredientData))
+			assert.Equal(t, "иконка должна быть в формате PNG или JPEG", err.Error())
+		})
+	}
+}
+
+func TestIngredientService_SetIcon_NotFound(t *testing.T) {
+	repo := &mockIngredientRepo{
+		updateIcon: func(ctx context.Context, id uint, icon []byte) error {
+			return domain.NewErrNotFound("Ингредиент не найден")
+		},
+	}
+	service := NewIngredientService(repo)
+
+	err := service.SetIcon(context.Background(), 42, []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A})
 	assert.True(t, errors.Is(err, domain.ErrNotFound))
 }

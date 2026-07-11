@@ -125,3 +125,39 @@ func (c *IngredientController) DeleteIngredient(ctx *gin.Context) {
 	}
 	ctx.Status(http.StatusNoContent)
 }
+
+func (c *IngredientController) SetIngredientIcon(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "неверный ID ингредиента"})
+		return
+	}
+
+	// Обрезаем чтение тела: oversized payload не грузится в память целиком.
+	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, services.MaxIconSize)
+	icon, err := ctx.GetRawData()
+	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "иконка слишком большая (макс. 512 KB)"})
+			return
+		}
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "не удалось прочитать тело запроса"})
+		return
+	}
+
+	err = c.service.SetIcon(ctx, uint(id), icon)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidIngredientData) {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.Status(http.StatusNoContent)
+}

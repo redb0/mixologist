@@ -200,6 +200,40 @@ func (suite *IngredientRepositoryTestSuite) TestUpdate_DuplicateName() {
 	assert.True(t, errors.Is(err, domain.ErrAlreadyExists))
 }
 
+func (suite *IngredientRepositoryTestSuite) TestUpdateIcon() {
+	t := suite.T()
+
+	created, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Джин",
+			Description:     "London dry gin",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Strong,
+			IngredientType:  domain.StrongPart,
+		},
+	)
+	assert.NoError(t, err)
+	assert.Empty(t, created.Icon)
+
+	icon := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
+	err = suite.repository.UpdateIcon(suite.ctx, created.ID, icon)
+	assert.NoError(t, err)
+
+	updated, err := suite.repository.GetByID(suite.ctx, created.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, icon, updated.Icon)
+	assert.Equal(t, created.Name, updated.Name)
+}
+
+func (suite *IngredientRepositoryTestSuite) TestUpdateIcon_NotFound() {
+	t := suite.T()
+
+	err := suite.repository.UpdateIcon(suite.ctx, 42, []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A})
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
+}
+
 func (suite *IngredientRepositoryTestSuite) TestDelete() {
 	t := suite.T()
 

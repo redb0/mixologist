@@ -57,6 +57,7 @@ func main() {
 	router.POST("/ingredients", ingredientController.CreateIngredient)
 	router.PATCH("/ingredients/:id", ingredientController.UpdateIngredient)
 	router.DELETE("/ingredients/:id", ingredientController.DeleteIngredient)
+	router.PUT("/ingredients/:id/icon", ingredientController.SetIngredientIcon)
 	if err := router.Run(":8080"); err != nil {
 		log.Fatalf("Ошибка запуска HTTP-сервера: %v", err)
 	}

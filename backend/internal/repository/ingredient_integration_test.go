@@ -200,6 +200,60 @@ func (suite *IngredientRepositoryTestSuite) TestUpdate_DuplicateName() {
 	assert.True(t, errors.Is(err, domain.ErrAlreadyExists))
 }
 
+func (suite *IngredientRepositoryTestSuite) TestDelete() {
+	t := suite.T()
+
+	created, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Джин",
+			Description:     "London dry gin",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Strong,
+			IngredientType:  domain.StrongPart,
+		},
+	)
+	assert.NoError(t, err)
+
+	err = suite.repository.Delete(suite.ctx, created.ID)
+	assert.NoError(t, err)
+
+	ingredient, err := suite.repository.GetByID(suite.ctx, created.ID)
+	assert.Nil(t, ingredient)
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
+}
+
+func (suite *IngredientRepositoryTestSuite) TestDelete_NotFound() {
+	t := suite.T()
+
+	err := suite.repository.Delete(suite.ctx, 42)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
+}
+
+func (suite *IngredientRepositoryTestSuite) TestDelete_Twice() {
+	t := suite.T()
+
+	created, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Ром",
+			Description:     "Белый ром",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Strong,
+			IngredientType:  domain.StrongPart,
+		},
+	)
+	assert.NoError(t, err)
+
+	err = suite.repository.Delete(suite.ctx, created.ID)
+	assert.NoError(t, err)
+
+	err = suite.repository.Delete(suite.ctx, created.ID)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
+}
+
 func TestIngredientRepositoryTestSuite(t *testing.T) {
 	suite.Run(t, new(IngredientRepositoryTestSuite))
 }

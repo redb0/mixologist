@@ -11,6 +11,10 @@ HTTP-серверы, работу с PostgreSQL, сложные SQL-запрос
 - PostgreSQL в качестве основной базы данных
 - `migrate` для миграций
 - sqlx для доступа к БД
+- React, TypeScript, Vite и MUI для административного frontend
+- TanStack Query для серверного состояния frontend
+- Nginx как раздатчик SPA и reverse proxy `/api`
+- Docker Compose для PostgreSQL, миграций, backend и frontend
 - Redis — запланирован как кеш (пока не используется)
 
 ## Архитектура backend
@@ -47,6 +51,11 @@ backend/
 │   ├── services/                # бизнес-логика
 │   └── testutil/                # общие хелперы для интеграционных тестов
 └── migrations/                  # SQL-миграции
+frontend/
+├── src/app/                     # тема и инфраструктура приложения
+├── src/features/ingredients/    # типы, API и форма ингредиентов
+├── src/pages/                   # страницы списка, карточки и редактирования
+└── nginx.conf                   # SPA fallback и reverse proxy API
 ```
 
 ## Сущности
@@ -80,7 +89,9 @@ backend/
 | Метод    | Путь                    | Описание                    |
 |----------|-------------------------|-----------------------------|
 | `GET`    | `/ingredients`          | Список ингредиентов         |
+| `GET`    | `/health`               | Состояние backend и БД      |
 | `GET`    | `/ingredients/:id`      | Ингредиент по ID            |
+| `GET`    | `/ingredients/:id/icon` | Получить иконку             |
 | `POST`   | `/ingredients`          | Создать ингредиент          |
 | `PATCH`  | `/ingredients/:id`      | Частичное обновление        |
 | `DELETE` | `/ingredients/:id`      | Удалить ингредиент          |
@@ -100,6 +111,13 @@ backend/
   "created_at": "2026-05-31T12:00:00Z"
 }
 ```
+
+### Проверка состояния `GET /health`
+
+Проверяет доступность PostgreSQL через `PingContext`.
+
+- `200 OK`: `{"status":"ok"}`
+- `503 Service Unavailable`: `{"status":"unavailable"}`
 
 ### Список ингредиентов `GET /ingredients`
 
@@ -220,6 +238,20 @@ backend/
 | `400` | Невалидный `id` в path                 |
 | `404` | Ингредиент не найден                   |
 | `500` | Внутренняя ошибка (БД, инфраструктура) |
+
+### Получить иконку `GET /ingredients/:id/icon`
+
+**Response** `200 OK` — бинарное тело с `Content-Type: image/png` или
+`image/jpeg` и заголовком `Content-Length`.
+
+**Коды ответов:**
+
+| Код   | Условие                              |
+|-------|--------------------------------------|
+| `200` | Иконка получена                      |
+| `400` | Невалидный `id` в path               |
+| `404` | Ингредиент или его иконка не найдены |
+| `500` | Внутренняя ошибка                    |
 
 ### Загрузить иконку `PUT /ingredients/:id/icon`
 

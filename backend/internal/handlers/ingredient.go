@@ -21,18 +21,14 @@ func NewIngredientController(service services.IngredientService) *IngredientCont
 func (c *IngredientController) GetIngredients(ctx *gin.Context) {}
 
 func (c *IngredientController) GetIngredient(ctx *gin.Context) {
-	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "неверный ID ингредиента"})
+	id, err := parseIngredientID(ctx)
+	if err != nil {
+		RespondError(ctx, err)
 		return
 	}
-	ingredient, err := c.service.GetByID(ctx, uint(id))
+	ingredient, err := c.service.GetByID(ctx, id)
 	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusOK, toIngredientResponse(ingredient))
@@ -41,7 +37,7 @@ func (c *IngredientController) GetIngredient(ctx *gin.Context) {
 func (c *IngredientController) CreateIngredient(ctx *gin.Context) {
 	var ingredientRequest CreateIngredientRequest
 	if err := ctx.ShouldBindJSON(&ingredientRequest); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		RespondError(ctx, domain.NewErrInvalidIngredientData(err.Error()))
 		return
 	}
 
@@ -54,34 +50,26 @@ func (c *IngredientController) CreateIngredient(ctx *gin.Context) {
 		ingredientRequest.IngredientType,
 	)
 	if err != nil {
-		if errors.Is(err, domain.ErrAlreadyExists) {
-			ctx.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-			return
-		}
-		if errors.Is(err, domain.ErrInvalidIngredientData) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusCreated, toIngredientResponse(ingredient))
 }
 
 func (c *IngredientController) UpdateIngredient(ctx *gin.Context) {
-	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "неверный ID ингредиента"})
+	id, err := parseIngredientID(ctx)
+	if err != nil {
+		RespondError(ctx, err)
 		return
 	}
 
 	var req UpdateIngredientRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		RespondError(ctx, domain.NewErrInvalidIngredientData(err.Error()))
 		return
 	}
 
-	ingredient, err := c.service.Update(ctx, uint(id), services.UpdateIngredientPatch{
+	ingredient, err := c.service.Update(ctx, id, services.UpdateIngredientPatch{
 		Name:            req.Name,
 		Description:     req.Description,
 		UnitMeasurement: req.UnitMeasurement,
@@ -89,47 +77,30 @@ func (c *IngredientController) UpdateIngredient(ctx *gin.Context) {
 		IngredientType:  req.IngredientType,
 	})
 	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-			return
-		}
-		if errors.Is(err, domain.ErrAlreadyExists) {
-			ctx.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-			return
-		}
-		if errors.Is(err, domain.ErrInvalidIngredientData) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusOK, toIngredientResponse(ingredient))
 }
 
 func (c *IngredientController) DeleteIngredient(ctx *gin.Context) {
-	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "неверный ID ингредиента"})
+	id, err := parseIngredientID(ctx)
+	if err != nil {
+		RespondError(ctx, err)
 		return
 	}
 
-	err = c.service.Delete(ctx, uint(id))
-	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err := c.service.Delete(ctx, id); err != nil {
+		RespondError(ctx, err)
 		return
 	}
 	ctx.Status(http.StatusNoContent)
 }
 
 func (c *IngredientController) SetIngredientIcon(ctx *gin.Context) {
-	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "неверный ID ингредиента"})
+	id, err := parseIngredientID(ctx)
+	if err != nil {
+		RespondError(ctx, err)
 		return
 	}
 
@@ -139,25 +110,24 @@ func (c *IngredientController) SetIngredientIcon(ctx *gin.Context) {
 	if err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "иконка слишком большая (макс. 512 KB)"})
+			RespondError(ctx, domain.NewErrInvalidIngredientData("иконка слишком большая (макс. 512 KB)"))
 			return
 		}
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "не удалось прочитать тело запроса"})
+		RespondError(ctx, domain.NewErrInvalidIngredientData("не удалось прочитать тело запроса"))
 		return
 	}
 
-	err = c.service.SetIcon(ctx, uint(id), icon)
-	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-			return
-		}
-		if errors.Is(err, domain.ErrInvalidIngredientData) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err := c.service.SetIcon(ctx, id, icon); err != nil {
+		RespondError(ctx, err)
 		return
 	}
 	ctx.Status(http.StatusNoContent)
+}
+
+func parseIngredientID(ctx *gin.Context) (uint, error) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		return 0, domain.NewErrInvalidIngredientData("неверный ID ингредиента")
+	}
+	return uint(id), nil
 }

@@ -181,6 +181,7 @@ func (suite *IngredientRepositoryTestSuite) TestList() {
 			UnitMeasurement: domain.UnitMl,
 			ABV:             domain.Strong,
 			IngredientType:  domain.StrongPart,
+			Icon:            []byte{0x89, 0x50, 0x4E, 0x47},
 		},
 	)
 	assert.NoError(t, err)
@@ -205,6 +206,9 @@ func (suite *IngredientRepositoryTestSuite) TestList() {
 	assert.Equal(t, first.ID, list[1].ID)
 	assert.Equal(t, "Ром", list[0].Name)
 	assert.Equal(t, "Джин", list[1].Name)
+	assert.False(t, list[0].HasIcon)
+	assert.True(t, list[1].HasIcon)
+	assert.Empty(t, list[1].Icon)
 }
 
 func (suite *IngredientRepositoryTestSuite) TestList_Empty() {
@@ -364,6 +368,50 @@ func (suite *IngredientRepositoryTestSuite) TestUpdateIcon_NotFound() {
 	err := suite.repository.UpdateIcon(suite.ctx, 42, []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A})
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, domain.ErrNotFound))
+}
+
+func (suite *IngredientRepositoryTestSuite) TestGetIcon() {
+	created, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Джин",
+			Description:     "London dry gin",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Strong,
+			IngredientType:  domain.StrongPart,
+		},
+	)
+	suite.Require().NoError(err)
+
+	icon := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
+	suite.Require().NoError(suite.repository.UpdateIcon(suite.ctx, created.ID, icon))
+
+	got, err := suite.repository.GetIcon(suite.ctx, created.ID)
+	suite.Require().NoError(err)
+	suite.Equal(icon, got)
+}
+
+func (suite *IngredientRepositoryTestSuite) TestGetIcon_NotFound() {
+	icon, err := suite.repository.GetIcon(suite.ctx, 42)
+	suite.Nil(icon)
+	suite.True(errors.Is(err, domain.ErrNotFound))
+}
+
+func (suite *IngredientRepositoryTestSuite) TestGetIcon_Empty() {
+	created, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Тоник",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Free,
+			IngredientType:  domain.FreePart,
+		},
+	)
+	suite.Require().NoError(err)
+
+	icon, err := suite.repository.GetIcon(suite.ctx, created.ID)
+	suite.Nil(icon)
+	suite.True(errors.Is(err, domain.ErrNotFound))
 }
 
 func (suite *IngredientRepositoryTestSuite) TestDelete() {

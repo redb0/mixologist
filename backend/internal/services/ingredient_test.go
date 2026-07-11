@@ -12,6 +12,7 @@ import (
 
 type mockIngredientRepo struct {
 	getByID    func(ctx context.Context, id uint) (*domain.Ingredient, error)
+	getIcon    func(ctx context.Context, id uint) ([]byte, error)
 	create     func(ctx context.Context, ingredient *domain.Ingredient) (*domain.Ingredient, error)
 	update     func(ctx context.Context, ingredient *domain.Ingredient) error
 	updateIcon func(ctx context.Context, id uint, icon []byte) error
@@ -24,6 +25,13 @@ func (m *mockIngredientRepo) GetByID(ctx context.Context, id uint) (*domain.Ingr
 		panic("unexpected call to GetByID")
 	}
 	return m.getByID(ctx, id)
+}
+
+func (m *mockIngredientRepo) GetIcon(ctx context.Context, id uint) ([]byte, error) {
+	if m.getIcon == nil {
+		panic("unexpected call to GetIcon")
+	}
+	return m.getIcon(ctx, id)
 }
 
 func (m *mockIngredientRepo) Create(ctx context.Context, ingredient *domain.Ingredient) (*domain.Ingredient, error) {
@@ -103,6 +111,34 @@ func TestIngredientService_GetByID_NotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, domain.ErrNotFound))
 	assert.Nil(t, ingredient)
+}
+
+func TestIngredientService_GetIcon(t *testing.T) {
+	expected := []byte{0x89, 0x50, 0x4E, 0x47}
+	repo := &mockIngredientRepo{
+		getIcon: func(ctx context.Context, id uint) ([]byte, error) {
+			assert.Equal(t, uint(1), id)
+			return expected, nil
+		},
+	}
+
+	icon, err := NewIngredientService(repo).GetIcon(context.Background(), 1)
+
+	require.NoError(t, err)
+	assert.Equal(t, expected, icon)
+}
+
+func TestIngredientService_GetIcon_NotFound(t *testing.T) {
+	repo := &mockIngredientRepo{
+		getIcon: func(ctx context.Context, id uint) ([]byte, error) {
+			return nil, domain.NewErrNotFound("Иконка ингредиента не найдена")
+		},
+	}
+
+	icon, err := NewIngredientService(repo).GetIcon(context.Background(), 1)
+
+	assert.Nil(t, icon)
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
 }
 
 func TestIngredientService_Create(t *testing.T) {

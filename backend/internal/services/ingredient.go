@@ -30,6 +30,7 @@ type IngredientService interface {
 		ingredientType domain.IngredientTypeEnum,
 	) (*domain.Ingredient, error)
 	GetByID(ctx context.Context, id uint) (*domain.Ingredient, error)
+	GetIcon(ctx context.Context, id uint) ([]byte, error)
 	Update(ctx context.Context, id uint, patch UpdateIngredientPatch) (*domain.Ingredient, error)
 	SetIcon(ctx context.Context, id uint, icon []byte) error
 	Delete(ctx context.Context, id uint) error
@@ -42,6 +43,10 @@ type ingredientService struct {
 
 func (s *ingredientService) GetByID(ctx context.Context, id uint) (*domain.Ingredient, error) {
 	return s.repo.GetByID(ctx, id)
+}
+
+func (s *ingredientService) GetIcon(ctx context.Context, id uint) ([]byte, error) {
+	return s.repo.GetIcon(ctx, id)
 }
 
 func (s *ingredientService) Create(

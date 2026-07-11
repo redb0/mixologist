@@ -28,8 +28,16 @@ func ParseDBError(err error) error {
 		return domain.NewErrNotFound("запись не найдена")
 	}
 
+	// Отмена / дедлайн запроса (typed context и строковые обёртки драйверов).
+	if errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) ||
+		strings.Contains(err.Error(), "context canceled") ||
+		strings.Contains(err.Error(), "deadline exceeded") {
+		return ErrQueryCanceled
+	}
+
+	// Проблемы соединения с БД.
 	if strings.Contains(err.Error(), "timeout") ||
-		strings.Contains(err.Error(), "deadline exceeded") ||
 		strings.Contains(err.Error(), "connection refused") {
 		return ErrConnectionFailed
 	}
@@ -51,13 +59,6 @@ func ParseDBError(err error) error {
 		case "57014": // query canceled (timeout)
 			return ErrQueryCanceled
 		}
-	}
-
-	if errors.Is(err, context.DeadlineExceeded) {
-		return ErrQueryCanceled
-	}
-	if errors.Is(err, context.Canceled) {
-		return ErrQueryCanceled
 	}
 
 	return err

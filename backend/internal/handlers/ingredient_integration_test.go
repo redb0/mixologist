@@ -43,6 +43,7 @@ func (suite *IngredientHandlerTestSuite) SetupSuite() {
 	suite.router.GET("/ingredients/:id", controller.GetIngredient)
 	suite.router.PATCH("/ingredients/:id", controller.UpdateIngredient)
 	suite.router.DELETE("/ingredients/:id", controller.DeleteIngredient)
+	suite.router.PUT("/ingredients/:id/icon", controller.SetIngredientIcon)
 }
 
 func (suite *IngredientHandlerTestSuite) TearDownTest() {
@@ -366,6 +367,109 @@ func (suite *IngredientHandlerTestSuite) TestDeleteIngredient_400() {
 func (suite *IngredientHandlerTestSuite) TestDeleteIngredient_404() {
 	w := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodDelete, "/ingredients/42", nil)
+	suite.router.ServeHTTP(w, request)
+
+	suite.Equal(http.StatusNotFound, w.Code)
+
+	var response gin.H
+	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+	suite.Equal("Ингредиент не найден", response["error"])
+}
+
+func (suite *IngredientHandlerTestSuite) TestSetIngredientIcon_204() {
+	created, err := suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Джин",
+		Description:     "London dry gin",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Strong,
+		IngredientType:  domain.StrongPart,
+	})
+	suite.Require().NoError(err)
+
+	icon := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
+	w := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPut,
+		"/ingredients/"+strconv.Itoa(int(created.ID))+"/icon",
+		bytes.NewReader(icon),
+	)
+	request.Header.Set("Content-Type", "application/octet-stream")
+	suite.router.ServeHTTP(w, request)
+
+	suite.Equal(http.StatusNoContent, w.Code)
+	suite.Empty(w.Body.Bytes())
+
+	updated, err := suite.repository.GetByID(suite.ctx, created.ID)
+	suite.Require().NoError(err)
+	suite.Equal(icon, updated.Icon)
+
+	getW := httptest.NewRecorder()
+	getReq := httptest.NewRequest(http.MethodGet, "/ingredients/"+strconv.Itoa(int(created.ID)), nil)
+	suite.router.ServeHTTP(getW, getReq)
+	suite.Equal(http.StatusOK, getW.Code)
+
+	var response IngredientResponse
+	suite.Require().NoError(json.Unmarshal(getW.Body.Bytes(), &response))
+	suite.True(response.HasIcon)
+}
+
+func (suite *IngredientHandlerTestSuite) TestSetIngredientIcon_400() {
+	created, err := suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Ром",
+		Description:     "Белый ром",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Strong,
+		IngredientType:  domain.StrongPart,
+	})
+	suite.Require().NoError(err)
+
+	path := "/ingredients/" + strconv.Itoa(int(created.ID)) + "/icon"
+	cases := []struct {
+		name       string
+		path       string
+		body       []byte
+		wantErrMsg string
+	}{
+		{name: "empty body", path: path, body: nil, wantErrMsg: "иконка не может быть пустой"},
+		{
+			name:       "too large",
+			path:       path,
+			body:       make([]byte, services.MaxIconSize+1),
+			wantErrMsg: "иконка слишком большая (макс. 512 KB)",
+		},
+		{
+			name:       "invalid format",
+			path:       path,
+			body:       []byte("GIF89a"),
+			wantErrMsg: "иконка должна быть в формате PNG или JPEG",
+		},
+		{name: "invalid id", path: "/ingredients/not-a-number/icon", body: []byte{1}, wantErrMsg: "неверный ID ингредиента"},
+		{name: "zero id", path: "/ingredients/0/icon", body: []byte{1}, wantErrMsg: "неверный ID ингредиента"},
+	}
+	for _, tt := range cases {
+		suite.Run(tt.name, func() {
+			w := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPut, tt.path, bytes.NewReader(tt.body))
+			request.Header.Set("Content-Type", "application/octet-stream")
+			suite.router.ServeHTTP(w, request)
+
+			suite.Equal(http.StatusBadRequest, w.Code)
+
+			var response gin.H
+			suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+			suite.Equal(tt.wantErrMsg, response["error"])
+		})
+	}
+}
+
+func (suite *IngredientHandlerTestSuite) TestSetIngredientIcon_404() {
+	w := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPut,
+		"/ingredients/42/icon",
+		bytes.NewReader([]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}),
+	)
+	request.Header.Set("Content-Type", "application/octet-stream")
 	suite.router.ServeHTTP(w, request)
 
 	suite.Equal(http.StatusNotFound, w.Code)

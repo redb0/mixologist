@@ -19,6 +19,7 @@ type IngredientRepository interface {
 	Create(ctx context.Context, ingredient *domain.Ingredient) (*domain.Ingredient, error)
 	GetByID(ctx context.Context, id uint) (*domain.Ingredient, error)
 	Update(ctx context.Context, ingredient *domain.Ingredient) error
+	UpdateIcon(ctx context.Context, id uint, icon []byte) error
 	Delete(ctx context.Context, id uint) error
 	List(ctx context.Context) ([]*domain.Ingredient, error)
 }
@@ -97,6 +98,26 @@ func (r *ingredientRepository) Update(ctx context.Context, ingredient *domain.In
 		WHERE id = :id
 	`
 	result, err := r.db.NamedExecContext(ctx, query, ingredient)
+	if err != nil {
+		return ParseDBError(err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("ошибка получения количества обновленных строк: %w", err)
+	}
+	if rowsAffected == 0 {
+		return domain.NewErrNotFound("Ингредиент не найден")
+	}
+	return nil
+}
+
+func (r *ingredientRepository) UpdateIcon(ctx context.Context, id uint, icon []byte) error {
+	query := `
+		UPDATE ingredients
+		SET icon = $1
+		WHERE id = $2
+	`
+	result, err := r.db.ExecContext(ctx, query, icon, id)
 	if err != nil {
 		return ParseDBError(err)
 	}

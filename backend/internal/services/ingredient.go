@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/redb0/mixologist/internal/domain"
 	"github.com/redb0/mixologist/internal/repository"
 )
+
+const MaxIconSize = 512 * 1024 // 512 KB
 
 type UpdateIngredientPatch struct {
 	Name            *string
@@ -106,12 +109,26 @@ func (s *ingredientService) Delete(ctx context.Context, id uint) error {
 }
 
 func (s *ingredientService) SetIcon(ctx context.Context, id uint, icon []byte) error {
-	ingredient, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		return err
+	if len(icon) == 0 {
+		return domain.NewErrInvalidIngredientData("иконка не может быть пустой")
 	}
-	ingredient.Icon = icon
-	return s.repo.Update(ctx, ingredient)
+	if len(icon) > MaxIconSize {
+		return domain.NewErrInvalidIngredientData("иконка слишком большая (макс. 512 KB)")
+	}
+	if !isAllowedIconFormat(icon) {
+		return domain.NewErrInvalidIngredientData("иконка должна быть в формате PNG или JPEG")
+	}
+
+	return s.repo.UpdateIcon(ctx, id, icon)
+}
+
+func isAllowedIconFormat(icon []byte) bool {
+	switch http.DetectContentType(icon) {
+	case "image/png", "image/jpeg":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *ingredientService) validateIngredient(ingredient *domain.Ingredient) error {

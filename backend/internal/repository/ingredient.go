@@ -18,6 +18,7 @@ var (
 type IngredientRepository interface {
 	Create(ctx context.Context, ingredient *domain.Ingredient) (*domain.Ingredient, error)
 	GetByID(ctx context.Context, id uint) (*domain.Ingredient, error)
+	GetIcon(ctx context.Context, id uint) ([]byte, error)
 	Update(ctx context.Context, ingredient *domain.Ingredient) error
 	UpdateIcon(ctx context.Context, id uint, icon []byte) error
 	Delete(ctx context.Context, id uint) error
@@ -83,6 +84,21 @@ func (r *ingredientRepository) GetByID(ctx context.Context, id uint) (*domain.In
 	}
 	ingredientDomain := toDomainIngredient(&ingredient)
 	return ingredientDomain, nil
+}
+
+func (r *ingredientRepository) GetIcon(ctx context.Context, id uint) ([]byte, error) {
+	var icon []byte
+	err := r.db.GetContext(ctx, &icon, `SELECT icon FROM ingredients WHERE id = $1`, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.NewErrNotFound("Ингредиент не найден")
+		}
+		return nil, ParseDBError(err)
+	}
+	if len(icon) == 0 {
+		return nil, domain.NewErrNotFound("Иконка ингредиента не найдена")
+	}
+	return icon, nil
 }
 
 func (r *ingredientRepository) Update(ctx context.Context, ingredient *domain.Ingredient) error {
@@ -159,7 +175,7 @@ func (r *ingredientRepository) List(ctx context.Context) ([]*domain.Ingredient, 
 			unit_measurement,
 			abv,
 			ingredient_type,
-			icon,
+			(icon IS NOT NULL AND octet_length(icon) > 0) AS has_icon,
 			created_at
 		FROM ingredients
 		ORDER BY created_at DESC
@@ -185,6 +201,7 @@ func toDomainIngredient(ingredient *models.Ingredient) *domain.Ingredient {
 		ABV:             domain.ABVEnum(ingredient.ABV),
 		IngredientType:  domain.IngredientTypeEnum(ingredient.IngredientType),
 		Icon:            ingredient.Icon,
+		HasIcon:         ingredient.HasIcon || len(ingredient.Icon) > 0,
 		CreatedAt:       ingredient.CreatedAt,
 	}
 }

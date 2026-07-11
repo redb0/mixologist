@@ -10,7 +10,7 @@ func toIngredientResponse(ingredient *domain.Ingredient) IngredientResponse {
 		UnitMeasurement: ingredient.UnitMeasurement,
 		ABV:             ingredient.ABV,
 		IngredientType:  ingredient.IngredientType,
-		HasIcon:         len(ingredient.Icon) > 0,
+		HasIcon:         ingredient.HasIcon || len(ingredient.Icon) > 0,
 		CreatedAt:       ingredient.CreatedAt,
 	}
 }

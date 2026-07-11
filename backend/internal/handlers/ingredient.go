@@ -41,6 +41,21 @@ func (c *IngredientController) GetIngredient(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, toIngredientResponse(ingredient))
 }
 
+func (c *IngredientController) GetIngredientIcon(ctx *gin.Context) {
+	id, err := parseIngredientID(ctx)
+	if err != nil {
+		RespondError(ctx, err)
+		return
+	}
+	icon, err := c.service.GetIcon(ctx, id)
+	if err != nil {
+		RespondError(ctx, err)
+		return
+	}
+	ctx.Header("Content-Length", strconv.Itoa(len(icon)))
+	ctx.Data(http.StatusOK, http.DetectContentType(icon), icon)
+}
+
 func (c *IngredientController) CreateIngredient(ctx *gin.Context) {
 	var ingredientRequest CreateIngredientRequest
 	if err := ctx.ShouldBindJSON(&ingredientRequest); err != nil {

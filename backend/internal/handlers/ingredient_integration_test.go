@@ -313,7 +313,7 @@ func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_409() {
 
 	var response gin.H
 	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
-	suite.Contains(response["error"], "запись уже существует")
+	suite.Equal(response["error"], "запись уже существует")
 }
 
 func (suite *IngredientHandlerTestSuite) TestDeleteIngredient_204() {

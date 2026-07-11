@@ -27,7 +27,7 @@ func TestMapError(t *testing.T) {
 			name:       "invalid ingredient data wrapped",
 			err:        fmt.Errorf("%w: %v", domain.NewErrInvalidIngredientData("неверные данные ингредиента"), errors.New("неверная крепость")),
 			wantStatus: http.StatusBadRequest,
-			wantMsg:    "неверные данные ингредиента: неверная крепость",
+			wantMsg:    "неверные данные ингредиента",
 		},
 		{
 			name:       "already exists",
@@ -36,10 +36,10 @@ func TestMapError(t *testing.T) {
 			wantMsg:    "запись уже существует",
 		},
 		{
-			name:       "already exists wrapped",
+			name:       "already exists with pg detail wrap",
 			err:        fmt.Errorf("%w: Key (name)=(Джин) already exists.", domain.NewErrAlreadyExists("запись уже существует")),
 			wantStatus: http.StatusConflict,
-			wantMsg:    "запись уже существует: Key (name)=(Джин) already exists.",
+			wantMsg:    "запись уже существует",
 		},
 		{
 			name:       "not found",
@@ -51,7 +51,7 @@ func TestMapError(t *testing.T) {
 			name:       "not found wrapped",
 			err:        fmt.Errorf("repo: %w", domain.NewErrNotFound("Ингредиент не найден")),
 			wantStatus: http.StatusNotFound,
-			wantMsg:    "repo: Ингредиент не найден",
+			wantMsg:    "Ингредиент не найден",
 		},
 		{
 			name:       "unknown error",

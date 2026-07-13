@@ -510,6 +510,38 @@ func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_200() {
 	suite.False(response.HasIcon)
 }
 
+func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_200_WithIcon() {
+	created, err := suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Водка Absolut",
+		Description:     "Старое описание",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Strong,
+		IngredientType:  domain.StrongPart,
+		Icon:            []byte{1, 2, 3},
+	})
+	suite.Require().NoError(err)
+
+	body := `{"description":"Знаменитый шведский бренд"}`
+	w := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPatch,
+		"/ingredients/"+strconv.Itoa(int(created.ID)),
+		bytes.NewBufferString(body),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	suite.router.ServeHTTP(w, request)
+
+	suite.Equal(http.StatusOK, w.Code)
+
+	var response IngredientResponse
+	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+	suite.True(response.HasIcon)
+
+	newIcon, err := suite.repository.GetIcon(suite.ctx, created.ID)
+	suite.Require().NoError(err)
+	suite.Equal(created.Icon, newIcon)
+}
+
 func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_200_SameName() {
 	created, err := suite.repository.Create(suite.ctx, &domain.Ingredient{
 		Name:            "Джин",
@@ -732,7 +764,11 @@ func (suite *IngredientHandlerTestSuite) TestSetIngredientIcon_204() {
 
 	updated, err := suite.repository.GetByID(suite.ctx, created.ID)
 	suite.Require().NoError(err)
-	suite.Equal(icon, updated.Icon)
+	suite.True(updated.HasIcon)
+
+	newIcon, err := suite.repository.GetIcon(suite.ctx, created.ID)
+	suite.Require().NoError(err)
+	suite.Equal(icon, newIcon)
 
 	getW := httptest.NewRecorder()
 	getReq := httptest.NewRequest(http.MethodGet, "/ingredients/"+strconv.Itoa(int(created.ID)), nil)

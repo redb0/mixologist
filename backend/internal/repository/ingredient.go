@@ -34,7 +34,7 @@ func NewIngredientRepository(db *sqlx.DB) IngredientRepository {
 }
 
 func (r *ingredientRepository) Create(ctx context.Context, ingredient *domain.Ingredient) (*domain.Ingredient, error) {
-	query := `
+	query := `--sql
 		INSERT INTO ingredients (name, description, unit_measurement, abv, ingredient_type, icon)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, created_at
@@ -56,7 +56,7 @@ func (r *ingredientRepository) Create(ctx context.Context, ingredient *domain.In
 }
 
 func (r *ingredientRepository) GetByID(ctx context.Context, id uint) (*domain.Ingredient, error) {
-	query := `
+	query := `--sql
 		SELECT
 			id,
 			name,
@@ -64,7 +64,7 @@ func (r *ingredientRepository) GetByID(ctx context.Context, id uint) (*domain.In
 			unit_measurement,
 			abv,
 			ingredient_type,
-			icon,
+			(icon IS NOT NULL AND octet_length(icon) > 0) AS has_icon,
 			created_at
 		FROM ingredients
 		WHERE id = $1
@@ -102,15 +102,14 @@ func (r *ingredientRepository) GetIcon(ctx context.Context, id uint) ([]byte, er
 }
 
 func (r *ingredientRepository) Update(ctx context.Context, ingredient *domain.Ingredient) error {
-	query := `
+	query := `--sql
 		UPDATE ingredients
 		SET
 			name = :name,
 			description = :description,
 			unit_measurement = :unit_measurement,
 			abv = :abv,
-			ingredient_type = :ingredient_type,
-			icon = :icon
+			ingredient_type = :ingredient_type
 		WHERE id = :id
 	`
 	result, err := r.db.NamedExecContext(ctx, query, ingredient)
@@ -128,7 +127,7 @@ func (r *ingredientRepository) Update(ctx context.Context, ingredient *domain.In
 }
 
 func (r *ingredientRepository) UpdateIcon(ctx context.Context, id uint, icon []byte) error {
-	query := `
+	query := `--sql
 		UPDATE ingredients
 		SET icon = $1
 		WHERE id = $2
@@ -148,7 +147,7 @@ func (r *ingredientRepository) UpdateIcon(ctx context.Context, id uint, icon []b
 }
 
 func (r *ingredientRepository) Delete(ctx context.Context, id uint) error {
-	query := `
+	query := `--sql
 		DELETE FROM ingredients
 		WHERE id = :id
 	`
@@ -167,7 +166,7 @@ func (r *ingredientRepository) Delete(ctx context.Context, id uint) error {
 }
 
 func (r *ingredientRepository) List(ctx context.Context) ([]*domain.Ingredient, error) {
-	query := `
+	query := `--sql
 		SELECT
 			id,
 			name,
@@ -201,7 +200,7 @@ func toDomainIngredient(ingredient *models.Ingredient) *domain.Ingredient {
 		ABV:             domain.ABVEnum(ingredient.ABV),
 		IngredientType:  domain.IngredientTypeEnum(ingredient.IngredientType),
 		Icon:            ingredient.Icon,
-		HasIcon:         ingredient.HasIcon || len(ingredient.Icon) > 0,
+		HasIcon:         ingredient.HasIcon,
 		CreatedAt:       ingredient.CreatedAt,
 	}
 }

@@ -133,7 +133,7 @@ func (suite *IngredientRepositoryTestSuite) TestCreate_MinimalFields() {
 	assert.NoError(t, err)
 	assert.Equal(t, "Тоник", got.Name)
 	assert.Empty(t, got.Description)
-	assert.Empty(t, got.Icon)
+	assert.False(t, got.HasIcon)
 	assert.Equal(t, domain.UnitMl, got.UnitMeasurement)
 	assert.Equal(t, domain.Free, got.ABV)
 	assert.Equal(t, domain.FreePart, got.IngredientType)
@@ -208,7 +208,6 @@ func (suite *IngredientRepositoryTestSuite) TestList() {
 	assert.Equal(t, "Джин", list[1].Name)
 	assert.False(t, list[0].HasIcon)
 	assert.True(t, list[1].HasIcon)
-	assert.Empty(t, list[1].Icon)
 }
 
 func (suite *IngredientRepositoryTestSuite) TestList_Empty() {
@@ -252,7 +251,7 @@ func (suite *IngredientRepositoryTestSuite) TestGetByID() {
 	assert.Equal(t, createdIngredient.UnitMeasurement, ingredient.UnitMeasurement)
 	assert.Equal(t, createdIngredient.ABV, ingredient.ABV)
 	assert.Equal(t, createdIngredient.IngredientType, ingredient.IngredientType)
-	assert.Equal(t, createdIngredient.Icon, ingredient.Icon)
+	assert.False(t, ingredient.HasIcon)
 	assert.Equal(t, createdIngredient.CreatedAt, ingredient.CreatedAt)
 }
 
@@ -285,7 +284,7 @@ func (suite *IngredientRepositoryTestSuite) TestUpdate() {
 	assert.Equal(t, domain.UnitMl, updated.UnitMeasurement)
 	assert.Equal(t, domain.Low, updated.ABV)
 	assert.Equal(t, domain.StrongPart, updated.IngredientType)
-	assert.Equal(t, []byte{1, 2, 3}, updated.Icon)
+	assert.True(t, updated.HasIcon)
 }
 
 func (suite *IngredientRepositoryTestSuite) TestUpdate_NotFound() {
@@ -356,10 +355,9 @@ func (suite *IngredientRepositoryTestSuite) TestUpdateIcon() {
 	err = suite.repository.UpdateIcon(suite.ctx, created.ID, icon)
 	assert.NoError(t, err)
 
-	updated, err := suite.repository.GetByID(suite.ctx, created.ID)
+	updated, err := suite.repository.GetIcon(suite.ctx, created.ID)
 	assert.NoError(t, err)
-	assert.Equal(t, icon, updated.Icon)
-	assert.Equal(t, created.Name, updated.Name)
+	assert.Equal(t, icon, updated)
 }
 
 func (suite *IngredientRepositoryTestSuite) TestUpdateIcon_NotFound() {

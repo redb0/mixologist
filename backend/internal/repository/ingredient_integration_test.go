@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -99,19 +100,31 @@ func (suite *IngredientRepositoryTestSuite) TestCreate_DuplicateName() {
 	)
 	assert.NoError(t, err)
 
-	ingredient, err := suite.repository.Create(
-		suite.ctx,
-		&domain.Ingredient{
-			Name:            "Джин",
-			Description:     "Другой джин",
-			UnitMeasurement: domain.UnitMl,
-			ABV:             domain.Strong,
-			IngredientType:  domain.StrongPart,
-		},
-	)
-	assert.Nil(t, ingredient)
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, domain.ErrAlreadyExists))
+	cases := []struct {
+		testName string
+		name     string
+	}{
+		{testName: "same name", name: "Джин"},
+		{testName: "lower case name", name: "джин"},
+	}
+
+	for i, tt := range cases {
+		suite.Run(tt.testName, func() {
+			ingredient, err := suite.repository.Create(
+				suite.ctx,
+				&domain.Ingredient{
+					Name:            tt.name,
+					Description:     "Джин №" + strconv.Itoa(i),
+					UnitMeasurement: domain.UnitMl,
+					ABV:             domain.Strong,
+					IngredientType:  domain.StrongPart,
+				},
+			)
+			assert.Nil(t, ingredient)
+			assert.Error(t, err)
+			assert.True(t, errors.Is(err, domain.ErrAlreadyExists))
+		})
+	}
 }
 
 func (suite *IngredientRepositoryTestSuite) TestCreate_MinimalFields() {
@@ -139,37 +152,6 @@ func (suite *IngredientRepositoryTestSuite) TestCreate_MinimalFields() {
 	assert.Equal(t, domain.Free, got.ABV)
 	assert.Equal(t, domain.FreePart, got.IngredientType)
 	assert.True(t, ingredient.CreatedAt.Location() == time.UTC)
-}
-
-func (suite *IngredientRepositoryTestSuite) TestCreate_DuplicateName_DifferentCase() {
-	t := suite.T()
-
-	// Postgres UNIQUE(name) case-sensitive: "Джин" и "джин" — разные значения.
-	_, err := suite.repository.Create(
-		suite.ctx,
-		&domain.Ingredient{
-			Name:            "Джин",
-			Description:     "С заглавной",
-			UnitMeasurement: domain.UnitMl,
-			ABV:             domain.Strong,
-			IngredientType:  domain.StrongPart,
-		},
-	)
-	assert.NoError(t, err)
-
-	ingredient, err := suite.repository.Create(
-		suite.ctx,
-		&domain.Ingredient{
-			Name:            "джин",
-			Description:     "Со строчной",
-			UnitMeasurement: domain.UnitMl,
-			ABV:             domain.Strong,
-			IngredientType:  domain.StrongPart,
-		},
-	)
-	assert.NoError(t, err)
-	assert.NotNil(t, ingredient)
-	assert.Equal(t, "джин", ingredient.Name)
 }
 
 func (suite *IngredientRepositoryTestSuite) TestList() {

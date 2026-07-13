@@ -52,6 +52,7 @@ func (r *ingredientRepository) Create(ctx context.Context, ingredient *domain.In
 	if err != nil {
 		return nil, ParseDBError(err)
 	}
+	ingredient.CreatedAt = ingredient.CreatedAt.UTC()
 	return ingredient, nil
 }
 
@@ -201,6 +202,6 @@ func toDomainIngredient(ingredient *models.Ingredient) *domain.Ingredient {
 		IngredientType:  domain.IngredientTypeEnum(ingredient.IngredientType),
 		Icon:            ingredient.Icon,
 		HasIcon:         ingredient.HasIcon,
-		CreatedAt:       ingredient.CreatedAt,
+		CreatedAt:       ingredient.CreatedAt.UTC(),
 	}
 }

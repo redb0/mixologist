@@ -10,7 +10,7 @@ CREATE TABLE ingredients (
     abv abv_enum NOT NULL,
     ingredient_type ingredient_type_enum NOT NULL DEFAULT 'другое',
     icon BYTEA DEFAULT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (name)
 );
 

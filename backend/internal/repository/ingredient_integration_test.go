@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/redb0/mixologist/internal/domain"
 	"github.com/redb0/mixologist/internal/testutil"
@@ -137,6 +138,7 @@ func (suite *IngredientRepositoryTestSuite) TestCreate_MinimalFields() {
 	assert.Equal(t, domain.UnitMl, got.UnitMeasurement)
 	assert.Equal(t, domain.Free, got.ABV)
 	assert.Equal(t, domain.FreePart, got.IngredientType)
+	assert.True(t, ingredient.CreatedAt.Location() == time.UTC)
 }
 
 func (suite *IngredientRepositoryTestSuite) TestCreate_DuplicateName_DifferentCase() {

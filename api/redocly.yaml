@@ -1,0 +1,16 @@
+apis:
+  mixologist@v1:
+    root: openapi.yaml
+
+extends:
+  - recommended
+
+rules:
+  # Auth enforcement появится в этапе 1; scheme зафиксирован заранее.
+  security-defined: off
+  # /health — operational endpoint без клиентских 4xx.
+  operation-4xx-response: off
+  # Same-origin server url `/` и локальная разработка.
+  no-server-example.com: off
+  operation-operationId: error
+  tag-description: off

@@ -10,9 +10,21 @@ CREATE TABLE ingredients (
     abv abv_enum NOT NULL,
     ingredient_type ingredient_type_enum NOT NULL DEFAULT 'другое',
     icon BYTEA DEFAULT NULL,
+    version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (name)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE UNIQUE INDEX ingredients_name_lower_unique ON ingredients (LOWER(name));
+
+-- Индекс используется для постраничного вывода ингредиентов по умолчанию
+CREATE INDEX ingredients_default_keyset_idx ON ingredients (created_at DESC, id DESC);
+
+-- Индекс используется для сортировки ингредиентов по имени
+CREATE INDEX ingredients_name_sort_idx ON ingredients (LOWER(name), id);
+
+-- Индекс используется для фильтрации ингредиентов по типу и крепости
+CREATE INDEX ingredients_type_abv_idx ON ingredients (ingredient_type, abv);
 
 COMMENT ON TABLE ingredients IS 'Ингредиенты коктейлей';
 COMMENT ON COLUMN ingredients.name IS 'Имя ингредиента';
@@ -21,4 +33,6 @@ COMMENT ON COLUMN ingredients.unit_measurement IS 'Единица измерен
 COMMENT ON COLUMN ingredients.abv IS 'Крепость ингредиента';
 COMMENT ON COLUMN ingredients.ingredient_type IS 'Тип ингредиента';
 COMMENT ON COLUMN ingredients.icon IS 'Иконка ингредиента';
+COMMENT ON COLUMN ingredients.version IS 'Версия ингредиента';
 COMMENT ON COLUMN ingredients.created_at IS 'Дата и время создания ингредиента';
+COMMENT ON COLUMN ingredients.updated_at IS 'Дата и время последнего обновления ингредиента';

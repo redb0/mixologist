@@ -12,7 +12,10 @@
     "test:watch": "vitest",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "api:lint": "redocly lint --config ../api/redocly.yaml ../api/openapi.yaml",
+    "api:generate": "openapi-typescript ../api/openapi.yaml -o src/shared/api/generated.ts",
+    "api:check": "openapi-typescript ../api/openapi.yaml -o src/shared/api/generated.check.ts && diff -u src/shared/api/generated.ts src/shared/api/generated.check.ts && rm -f src/shared/api/generated.check.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -30,6 +33,8 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@redocly/cli": "^2.38.0",
+    "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
@@ -40,6 +45,7 @@
     "eslint-config-prettier": "^10.1.8",
     "jsdom": "^29.1.1",
     "msw": "^2.15.0",
+    "openapi-typescript": "^7.13.0",
     "oxlint": "^1.71.0",
     "prettier": "^3.9.5",
     "typescript": "~6.0.2",

@@ -133,7 +133,7 @@ func (suite *IngredientRepositoryTestSuite) TestCreate_MinimalFields() {
 	assert.NoError(t, err)
 	assert.Equal(t, "Тоник", got.Name)
 	assert.Empty(t, got.Description)
-	assert.True(t, got.HasIcon)
+	assert.False(t, got.HasIcon)
 	assert.Equal(t, domain.UnitMl, got.UnitMeasurement)
 	assert.Equal(t, domain.Free, got.ABV)
 	assert.Equal(t, domain.FreePart, got.IngredientType)

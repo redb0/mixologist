@@ -21,12 +21,18 @@ func NewIngredientController(service services.IngredientService) *IngredientCont
 }
 
 func (c *IngredientController) ListIngredients(ctx *gin.Context) {
-	ingredients, err := c.service.List(ctx)
+	params, err := parseIngredientListParams(ctx)
 	if err != nil {
 		RespondError(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, toIngredientsResponse(ingredients))
+
+	page, err := c.service.List(ctx, params)
+	if err != nil {
+		RespondError(ctx, err)
+		return
+	}
+	ctx.JSON(http.StatusOK, toIngredientListResponse(page))
 }
 
 func (c *IngredientController) GetIngredient(ctx *gin.Context) {
@@ -40,7 +46,7 @@ func (c *IngredientController) GetIngredient(ctx *gin.Context) {
 		RespondError(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, toIngredientResponse(ingredient))
+	ctx.JSON(http.StatusOK, toIngredientResponsePtr(ingredient))
 }
 
 func (c *IngredientController) GetIngredientIcon(ctx *gin.Context) {
@@ -78,7 +84,7 @@ func (c *IngredientController) CreateIngredient(ctx *gin.Context) {
 		RespondError(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusCreated, toIngredientResponse(ingredient))
+	ctx.JSON(http.StatusCreated, toIngredientResponsePtr(ingredient))
 }
 
 func (c *IngredientController) UpdateIngredient(ctx *gin.Context) {
@@ -105,7 +111,7 @@ func (c *IngredientController) UpdateIngredient(ctx *gin.Context) {
 		RespondError(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, toIngredientResponse(ingredient))
+	ctx.JSON(http.StatusOK, toIngredientResponsePtr(ingredient))
 }
 
 func (c *IngredientController) DeleteIngredient(ctx *gin.Context) {

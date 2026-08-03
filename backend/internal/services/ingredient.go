@@ -34,7 +34,7 @@ type IngredientService interface {
 	Update(ctx context.Context, id uint, patch UpdateIngredientPatch) (*domain.Ingredient, error)
 	SetIcon(ctx context.Context, id uint, icon []byte) error
 	Delete(ctx context.Context, id uint) error
-	List(ctx context.Context) ([]*domain.Ingredient, error)
+	List(ctx context.Context, params domain.IngredientListParams) (domain.IngredientPage, error)
 }
 
 type ingredientService struct {
@@ -128,8 +128,28 @@ func (s *ingredientService) SetIcon(ctx context.Context, id uint, icon []byte) e
 	return s.repo.UpdateIcon(ctx, id, icon)
 }
 
-func (s *ingredientService) List(ctx context.Context) ([]*domain.Ingredient, error) {
-	return s.repo.List(ctx)
+func (s *ingredientService) List(ctx context.Context, params domain.IngredientListParams) (domain.IngredientPage, error) {
+	params = normalizeListParams(params)
+	if err := validateListParams(params); err != nil {
+		return domain.IngredientPage{}, err
+	}
+
+	keyset, err := DecodePageToken(params.PageToken, params)
+	if err != nil {
+		return domain.IngredientPage{}, err
+	}
+
+	page, hasMore, err := s.repo.List(ctx, params, keyset)
+	if err != nil {
+		return domain.IngredientPage{}, err
+	}
+
+	if hasMore && len(page.Items) > 0 {
+		last := page.Items[len(page.Items)-1]
+		page.NextPageToken = EncodePageToken(params.Sort, params.Order, params.PageSize, last)
+	}
+
+	return page, nil
 }
 
 func isAllowedIconFormat(icon []byte) bool {

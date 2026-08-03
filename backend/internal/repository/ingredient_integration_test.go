@@ -182,24 +182,152 @@ func (suite *IngredientRepositoryTestSuite) TestList() {
 	)
 	assert.NoError(t, err)
 
-	list, err := suite.repository.List(suite.ctx)
+	list, _, err := suite.repository.List(suite.ctx, defaultListParams(), nil)
 	assert.NoError(t, err)
-	assert.Len(t, list, 2)
+	assert.Len(t, list.Items, 2)
 	// ORDER BY created_at DESC — последний созданный первым
-	assert.Equal(t, second.ID, list[0].ID)
-	assert.Equal(t, first.ID, list[1].ID)
-	assert.Equal(t, "Ром", list[0].Name)
-	assert.Equal(t, "Джин", list[1].Name)
-	assert.False(t, list[0].HasIcon)
-	assert.True(t, list[1].HasIcon)
+	assert.Equal(t, second.ID, list.Items[0].ID)
+	assert.Equal(t, first.ID, list.Items[1].ID)
+	assert.Equal(t, "Ром", list.Items[0].Name)
+	assert.Equal(t, "Джин", list.Items[1].Name)
+	assert.False(t, list.Items[0].HasIcon)
+	assert.True(t, list.Items[1].HasIcon)
+	assert.Equal(t, 2, list.TotalSize)
 }
 
 func (suite *IngredientRepositoryTestSuite) TestList_Empty() {
 	t := suite.T()
 
-	list, err := suite.repository.List(suite.ctx)
+	list, _, err := suite.repository.List(suite.ctx, defaultListParams(), nil)
 	assert.NoError(t, err)
-	assert.Empty(t, list)
+	assert.Empty(t, list.Items)
+	assert.Equal(t, 0, list.TotalSize)
+}
+
+func (suite *IngredientRepositoryTestSuite) TestList_WithFilters() {
+	t := suite.T()
+
+	_, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Апельсиновый сок",
+			Description:     "Свежий",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Free,
+			IngredientType:  domain.FreePart,
+		},
+	)
+	assert.NoError(t, err)
+
+	_, err = suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Тоник",
+			Description:     "Газированный",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Free,
+			IngredientType:  domain.FreePart,
+		},
+	)
+	assert.NoError(t, err)
+
+	_, err = suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Джин",
+			Description:     "Крепкий",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Strong,
+			IngredientType:  domain.StrongPart,
+		},
+	)
+	assert.NoError(t, err)
+
+	list, hasMore, err := suite.repository.List(
+		suite.ctx,
+		domain.IngredientListParams{
+			PageSize: 25,
+			Sort:     domain.ByCreatedAt,
+			Order:    domain.Desc,
+			Filters: domain.IngredientFilters{
+				Name:           ptrString("сок"),
+				ABV:            ptrABV(domain.Free),
+				IngredientType: ptrIngredientType(domain.FreePart),
+			},
+		},
+		nil,
+	)
+	assert.NoError(t, err)
+	assert.False(t, hasMore)
+	assert.Equal(t, 1, list.TotalSize)
+	assert.Len(t, list.Items, 1)
+	assert.Equal(t, "Апельсиновый сок", list.Items[0].Name)
+}
+
+func (suite *IngredientRepositoryTestSuite) TestList_KeysetPagination() {
+	t := suite.T()
+
+	first, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Апероль",
+			Description:     "Первый",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Low,
+			IngredientType:  domain.Liqueur,
+		},
+	)
+	assert.NoError(t, err)
+
+	second, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Бурбон",
+			Description:     "Второй",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Strong,
+			IngredientType:  domain.StrongPart,
+		},
+	)
+	assert.NoError(t, err)
+
+	third, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Вермут",
+			Description:     "Третий",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Low,
+			IngredientType:  domain.Vermouth,
+		},
+	)
+	assert.NoError(t, err)
+
+	params := domain.IngredientListParams{
+		PageSize: 2,
+		Sort:     domain.ByCreatedAt,
+		Order:    domain.Desc,
+	}
+
+	page1, hasMore, err := suite.repository.List(suite.ctx, params, nil)
+	assert.NoError(t, err)
+	assert.True(t, hasMore)
+	assert.Len(t, page1.Items, 2)
+	assert.Equal(t, third.ID, page1.Items[0].ID)
+	assert.Equal(t, second.ID, page1.Items[1].ID)
+	assert.Equal(t, 3, page1.TotalSize)
+
+	cursor := &domain.IngredientListCursor{
+		ID:        page1.Items[len(page1.Items)-1].ID,
+		CreatedAt: page1.Items[len(page1.Items)-1].CreatedAt,
+	}
+
+	page2, hasMore, err := suite.repository.List(suite.ctx, params, cursor)
+	assert.NoError(t, err)
+	assert.False(t, hasMore)
+	assert.Len(t, page2.Items, 1)
+	assert.Equal(t, first.ID, page2.Items[0].ID)
+	assert.Equal(t, 3, page2.TotalSize)
 }
 
 func (suite *IngredientRepositoryTestSuite) TestGetByID_NotFound() {
@@ -258,6 +386,8 @@ func (suite *IngredientRepositoryTestSuite) TestUpdate() {
 	created.Name = "Джин London Dry"
 	created.Description = "Новое описание"
 	created.ABV = domain.Low
+	initialVersion := created.Version
+	initialUpdatedAt := created.UpdatedAt
 	err = suite.repository.Update(suite.ctx, created)
 	assert.NoError(t, err)
 
@@ -269,6 +399,8 @@ func (suite *IngredientRepositoryTestSuite) TestUpdate() {
 	assert.Equal(t, domain.Low, updated.ABV)
 	assert.Equal(t, domain.StrongPart, updated.IngredientType)
 	assert.True(t, updated.HasIcon)
+	assert.Equal(t, initialVersion+1, updated.Version)
+	assert.True(t, updated.UpdatedAt.After(initialUpdatedAt) || updated.UpdatedAt.Equal(initialUpdatedAt))
 }
 
 func (suite *IngredientRepositoryTestSuite) TestUpdate_NotFound() {
@@ -317,6 +449,33 @@ func (suite *IngredientRepositoryTestSuite) TestUpdate_DuplicateName() {
 	err = suite.repository.Update(suite.ctx, vodka)
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, domain.ErrAlreadyExists))
+}
+
+func (suite *IngredientRepositoryTestSuite) TestUpdate_VersionConflict() {
+	t := suite.T()
+
+	created, err := suite.repository.Create(
+		suite.ctx,
+		&domain.Ingredient{
+			Name:            "Текила",
+			Description:     "Blanco",
+			UnitMeasurement: domain.UnitMl,
+			ABV:             domain.Strong,
+			IngredientType:  domain.StrongPart,
+		},
+	)
+	assert.NoError(t, err)
+
+	stale := *created
+
+	created.Description = "Reposado"
+	err = suite.repository.Update(suite.ctx, created)
+	assert.NoError(t, err)
+
+	stale.Description = "Anejo"
+	err = suite.repository.Update(suite.ctx, &stale)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrVersionConflict))
 }
 
 func (suite *IngredientRepositoryTestSuite) TestUpdateIcon() {

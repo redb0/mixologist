@@ -32,7 +32,6 @@ func buildFiltersClause(filters domain.IngredientFilters, startArg int) (string,
 	if filters.IngredientType != nil {
 		parts = append(parts, fmt.Sprintf("ingredient_type = $%d", arg))
 		args = append(args, *filters.IngredientType)
-		arg += 1
 	}
 	return strings.Join(parts, " AND "), args
 }

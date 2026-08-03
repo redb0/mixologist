@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/redb0/mixologist/internal/domain"
@@ -123,7 +124,11 @@ func (r *ingredientRepository) Update(ctx context.Context, ingredient *domain.In
 	if err != nil {
 		return ParseDBError(err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ошибка закрытия rows: %v", err)
+		}
+	}()
 
 	if !rows.Next() {
 		var exists bool

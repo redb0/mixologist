@@ -36,7 +36,7 @@ type IngredientResponse struct {
 }
 
 type IngredientListResponse struct {
-	Ingredients   []IngredientResponse       `json:"ingredients"`
-	NextPageToken string                     `json:"nextPageToken"`
-	TotalSize     int                        `json:"totalSize"`
+	Ingredients   []IngredientResponse `json:"ingredients"`
+	NextPageToken string               `json:"nextPageToken"`
+	TotalSize     int                  `json:"totalSize"`
 }

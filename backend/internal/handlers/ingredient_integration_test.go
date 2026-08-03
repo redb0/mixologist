@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -185,7 +186,11 @@ func (suite *IngredientHandlerTestSuite) TestListIngredients_200_PaginationAndFi
 	suite.Empty(secondPage.NextPageToken)
 
 	filterW := httptest.NewRecorder()
-	filterReq := httptest.NewRequest(http.MethodGet, "/ingredients?name=ник&abv=безалкогольный&ingredient_type=безалкогольная часть", nil)
+	filterParams := url.Values{}
+	filterParams.Set("name", "ник")
+	filterParams.Set("abv", "безалкогольный")
+	filterParams.Set("ingredient_type", "безалкогольная часть")
+	filterReq := httptest.NewRequest(http.MethodGet, "/ingredients?"+filterParams.Encode(), nil)
 	suite.router.ServeHTTP(filterW, filterReq)
 
 	suite.Equal(http.StatusOK, filterW.Code)

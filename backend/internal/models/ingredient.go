@@ -11,5 +11,7 @@ type Ingredient struct {
 	IngredientType  string    `db:"ingredient_type"`
 	Icon            []byte    `db:"icon"`
 	HasIcon         bool      `db:"has_icon"`
+	Version         int       `db:"version"`
 	CreatedAt       time.Time `db:"created_at"`
+	UpdatedAt       time.Time `db:"updated_at"`
 }

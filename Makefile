@@ -1,10 +1,13 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help migrate-create migrate-up migrate-down
+.PHONY: help migrate-create migrate-up migrate-down lint lint-go lint-frontend gofmt golangci-lint
 
 NAME ?=
 DOWN_STEPS ?= 1
 MIGRATIONS_DIR := ./backend/migrations
+BACKEND_DIR := backend
+FRONTEND_DIR := frontend
+GOLANGCI_LINT_VERSION := v2.4.0
 
 # DB_URL: приоритет — аргумент make (DB_URL=...), иначе переменная окружения;
 # если не задано, подхватывается .env в корне репозитория (при наличии).
@@ -28,6 +31,15 @@ help:
 	@echo "      Откатить миграции (по умолчанию последнюю одну)."
 	@echo "      Источник DB_URL такой же, как у migrate-up."
 	@echo "      Пример: make migrate-down DB_URL='postgres://…' DOWN_STEPS=1"
+	@echo ""
+	@echo "  make lint"
+	@echo "      Проверки линтеров backend и frontend (как в CI)."
+	@echo ""
+	@echo "  make lint-go"
+	@echo "      gofmt и golangci-lint для backend."
+	@echo ""
+	@echo "  make lint-frontend"
+	@echo "      npm run lint и npm run typecheck для frontend."
 
 migrate-create:
 	@if [ -z "$(NAME)" ]; then \
@@ -52,3 +64,23 @@ migrate-down:
 		exit 1; \
 	fi
 	migrate -path "$(MIGRATIONS_DIR)" -database "$(DB_URL)" down "$(DOWN_STEPS)"
+
+lint: lint-go lint-frontend
+
+lint-go: gofmt golangci-lint
+
+gofmt:
+	@cd "$(BACKEND_DIR)" && \
+		unformatted="$$(gofmt -l -s .)" && \
+		if [ -n "$$unformatted" ]; then \
+			echo "These files are not gofmt-formatted:"; \
+			printf '%s\n' "$$unformatted"; \
+			exit 1; \
+		fi
+
+golangci-lint:
+	cd "$(BACKEND_DIR)" && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
+
+lint-frontend:
+	cd "$(FRONTEND_DIR)" && npm run lint
+	cd "$(FRONTEND_DIR)" && npm run typecheck

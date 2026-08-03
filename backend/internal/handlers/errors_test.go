@@ -42,6 +42,18 @@ func TestMapError(t *testing.T) {
 			wantMsg:    "запись уже существует",
 		},
 		{
+			name:       "version conflict",
+			err:        domain.NewErrVersionConflict("конфликт версии ингредиента"),
+			wantStatus: http.StatusConflict,
+			wantMsg:    "конфликт версии ингредиента",
+		},
+		{
+			name:       "version conflict wrapped",
+			err:        fmt.Errorf("repo: %w", domain.NewErrVersionConflict("конфликт версии ингредиента")),
+			wantStatus: http.StatusConflict,
+			wantMsg:    "конфликт версии ингредиента",
+		},
+		{
 			name:       "not found",
 			err:        domain.NewErrNotFound("Ингредиент не найден"),
 			wantStatus: http.StatusNotFound,

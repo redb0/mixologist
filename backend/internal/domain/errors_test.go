@@ -30,3 +30,19 @@ func TestNewErrNotFound_AsMessage(t *testing.T) {
 		t.Fatalf("ожидали извлечь NotFoundError с Message через errors.As; got %+v", nf)
 	}
 }
+
+func TestNewErrVersionConflict_IsUnwrapped(t *testing.T) {
+	err := domain.NewErrVersionConflict("stale version")
+	if !errors.Is(err, domain.ErrVersionConflict) {
+		t.Fatal("errors.Is(..., ErrVersionConflict) должна быть истинной для ошибки без обёртки")
+	}
+}
+
+func TestNewErrVersionConflict_AsMessage(t *testing.T) {
+	inner := domain.NewErrVersionConflict("конфликт версии ингредиента")
+	wrapped := fmt.Errorf("слой выше: %w", inner)
+	var conflict *domain.VersionConflictError
+	if !errors.As(wrapped, &conflict) || conflict.Message != "конфликт версии ингредиента" {
+		t.Fatalf("ожидали извлечь VersionConflictError с Message через errors.As; got %+v", conflict)
+	}
+}

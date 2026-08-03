@@ -24,9 +24,19 @@ func MapError(err error) (status int, clientMessage string) {
 		return http.StatusConflict, alreadyExists.Message
 	}
 
+	var versionConflict *domain.VersionConflictError
+	if errors.As(err, &versionConflict) {
+		return http.StatusConflict, versionConflict.Message
+	}
+
 	var notFound *domain.NotFoundError
 	if errors.As(err, &notFound) {
 		return http.StatusNotFound, notFound.Message
+	}
+
+	var invalidPageToken *domain.InvalidPageTokenError
+	if errors.As(err, &invalidPageToken) {
+		return http.StatusBadRequest, invalidPageToken.Message
 	}
 
 	return http.StatusInternalServerError, internalServerErrorMessage

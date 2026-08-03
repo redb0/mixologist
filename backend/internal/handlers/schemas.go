@@ -30,5 +30,13 @@ type IngredientResponse struct {
 	ABV             domain.ABVEnum             `json:"abv"`
 	IngredientType  domain.IngredientTypeEnum  `json:"ingredient_type"`
 	HasIcon         bool                       `json:"has_icon"`
+	Version         int                        `json:"version"`
 	CreatedAt       time.Time                  `json:"created_at"`
+	UpdatedAt       time.Time                  `json:"updated_at"`
+}
+
+type IngredientListResponse struct {
+	Ingredients   []IngredientResponse `json:"ingredients"`
+	NextPageToken string               `json:"nextPageToken"`
+	TotalSize     int                  `json:"totalSize"`
 }

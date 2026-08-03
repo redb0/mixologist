@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/redb0/mixologist/internal/domain"
@@ -17,7 +18,7 @@ type mockIngredientRepo struct {
 	update     func(ctx context.Context, ingredient *domain.Ingredient) error
 	updateIcon func(ctx context.Context, id uint, icon []byte) error
 	delete     func(ctx context.Context, id uint) error
-	list       func(ctx context.Context) ([]*domain.Ingredient, error)
+	list       func(ctx context.Context, params domain.IngredientListParams, keyset *domain.IngredientListCursor) (domain.IngredientPage, bool, error)
 }
 
 func (m *mockIngredientRepo) GetByID(ctx context.Context, id uint) (*domain.Ingredient, error) {
@@ -62,11 +63,15 @@ func (m *mockIngredientRepo) Delete(ctx context.Context, id uint) error {
 	return m.delete(ctx, id)
 }
 
-func (m *mockIngredientRepo) List(ctx context.Context) ([]*domain.Ingredient, error) {
+func (m *mockIngredientRepo) List(
+	ctx context.Context,
+	params domain.IngredientListParams,
+	keyset *domain.IngredientListCursor,
+) (domain.IngredientPage, bool, error) {
 	if m.list == nil {
 		panic("unexpected call to List")
 	}
-	return m.list(ctx)
+	return m.list(ctx, params, keyset)
 }
 
 func ptr[T any](v T) *T {
@@ -447,49 +452,183 @@ func TestIngredientService_SetIcon_NotFound(t *testing.T) {
 }
 
 func TestIngredientService_List(t *testing.T) {
-	expected := []*domain.Ingredient{
-		sampleIngredient(2),
-		sampleIngredient(1),
+	expected := []domain.Ingredient{
+		*sampleIngredient(2),
+		*sampleIngredient(1),
 	}
 	repo := &mockIngredientRepo{
-		list: func(ctx context.Context) ([]*domain.Ingredient, error) {
-			return expected, nil
+		list: func(ctx context.Context, params domain.IngredientListParams, keyset *domain.IngredientListCursor) (domain.IngredientPage, bool, error) {
+			return domain.IngredientPage{
+				Items:     expected,
+				TotalSize: 2,
+			}, false, nil
 		},
 	}
 	service := NewIngredientService(repo)
 
-	list, err := service.List(context.Background())
+	page, err := service.List(context.Background(), domain.IngredientListParams{})
 	require.NoError(t, err)
-	assert.Equal(t, expected, list)
-	assert.Len(t, list, 2)
-	assert.Equal(t, uint(2), list[0].ID)
-	assert.Equal(t, uint(1), list[1].ID)
+	assert.Equal(t, expected, page.Items)
+	assert.Equal(t, 2, page.TotalSize)
+	assert.Empty(t, page.NextPageToken)
 }
 
 func TestIngredientService_List_Empty(t *testing.T) {
 	repo := &mockIngredientRepo{
-		list: func(ctx context.Context) ([]*domain.Ingredient, error) {
-			return []*domain.Ingredient{}, nil
+		list: func(ctx context.Context, params domain.IngredientListParams, keyset *domain.IngredientListCursor) (domain.IngredientPage, bool, error) {
+			return domain.IngredientPage{TotalSize: 0}, false, nil
 		},
 	}
 	service := NewIngredientService(repo)
 
-	list, err := service.List(context.Background())
+	page, err := service.List(context.Background(), domain.IngredientListParams{})
 	require.NoError(t, err)
-	assert.Empty(t, list)
-	assert.NotNil(t, list)
+	assert.Empty(t, page.Items)
 }
 
 func TestIngredientService_List_RepoError(t *testing.T) {
 	repoErr := errors.New("db unavailable")
 	repo := &mockIngredientRepo{
-		list: func(ctx context.Context) ([]*domain.Ingredient, error) {
-			return nil, repoErr
+		list: func(ctx context.Context, params domain.IngredientListParams, keyset *domain.IngredientListCursor) (domain.IngredientPage, bool, error) {
+			return domain.IngredientPage{}, false, repoErr
 		},
 	}
 	service := NewIngredientService(repo)
 
-	list, err := service.List(context.Background())
-	assert.Nil(t, list)
+	page, err := service.List(context.Background(), domain.IngredientListParams{})
+	assert.Equal(t, domain.IngredientPage{}, page)
 	assert.ErrorIs(t, err, repoErr)
+}
+
+func TestIngredientService_List_InvalidPageSize(t *testing.T) {
+	cases := []struct {
+		name     string
+		pageSize int
+	}{
+		{name: "negative page size", pageSize: -1},
+		{name: "too large page size", pageSize: 101},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockIngredientRepo{
+				list: func(ctx context.Context, params domain.IngredientListParams, keyset *domain.IngredientListCursor) (domain.IngredientPage, bool, error) {
+					t.Fatal("repository list must not be called for invalid pageSize")
+					return domain.IngredientPage{}, false, nil
+				},
+			}
+			service := NewIngredientService(repo)
+
+			page, err := service.List(context.Background(), domain.IngredientListParams{
+				PageSize: tt.pageSize,
+				Sort:     domain.ByCreatedAt,
+				Order:    domain.Desc,
+			})
+			assert.Equal(t, domain.IngredientPage{}, page)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, domain.ErrInvalidIngredientData)
+			assert.Equal(t, "pageSize должен быть от 1 до 100", err.Error())
+		})
+	}
+}
+
+func TestIngredientService_List_InvalidNameFilter(t *testing.T) {
+	cases := []struct {
+		name       string
+		filterName string
+	}{
+		{name: "empty name filter", filterName: ""},
+		{name: "too long name filter", filterName: strings.Repeat("i", 513)},
+		{name: "too long name filter cyrillic", filterName: strings.Repeat("Б", 513)},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockIngredientRepo{
+				list: func(ctx context.Context, params domain.IngredientListParams, keyset *domain.IngredientListCursor) (domain.IngredientPage, bool, error) {
+					t.Fatal("repository list must not be called for invalid name filter")
+					return domain.IngredientPage{}, false, nil
+				},
+			}
+			service := NewIngredientService(repo)
+
+			page, err := service.List(context.Background(), domain.IngredientListParams{
+				PageSize: 25,
+				Sort:     domain.ByCreatedAt,
+				Order:    domain.Desc,
+				Filters: domain.IngredientFilters{
+					Name: &tt.filterName,
+				},
+			})
+			assert.Equal(t, domain.IngredientPage{}, page)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, domain.ErrInvalidIngredientData)
+			assert.Equal(t, "недопустимое значение name", err.Error())
+		})
+	}
+}
+
+func TestIngredientService_List_ValidNameFilter_MaxLength512(t *testing.T) {
+	filterName := strings.Repeat("Ж", 512)
+	repoCalled := false
+
+	repo := &mockIngredientRepo{
+		list: func(ctx context.Context, params domain.IngredientListParams, keyset *domain.IngredientListCursor) (domain.IngredientPage, bool, error) {
+			repoCalled = true
+			require.NotNil(t, params.Filters.Name)
+			assert.Equal(t, filterName, *params.Filters.Name)
+			return domain.IngredientPage{TotalSize: 0}, false, nil
+		},
+	}
+	service := NewIngredientService(repo)
+
+	page, err := service.List(context.Background(), domain.IngredientListParams{
+		PageSize: 25,
+		Sort:     domain.ByCreatedAt,
+		Order:    domain.Desc,
+		Filters: domain.IngredientFilters{
+			Name: &filterName,
+		},
+	})
+
+	require.NoError(t, err)
+	assert.True(t, repoCalled)
+	assert.Equal(t, 0, page.TotalSize)
+	assert.Empty(t, page.Items)
+}
+
+func TestIngredientService_List_SetsNextPageToken(t *testing.T) {
+	params := domain.IngredientListParams{
+		PageSize: 1,
+		Sort:     domain.ByName,
+		Order:    domain.Asc,
+	}
+	repo := &mockIngredientRepo{
+		list: func(ctx context.Context, gotParams domain.IngredientListParams, keyset *domain.IngredientListCursor) (domain.IngredientPage, bool, error) {
+			assert.Equal(t, params, gotParams)
+			assert.Nil(t, keyset)
+			return domain.IngredientPage{
+				Items: []domain.Ingredient{
+					{
+						ID:   2,
+						Name: "Джин",
+					},
+				},
+				TotalSize: 2,
+			}, true, nil
+		},
+	}
+	service := NewIngredientService(repo)
+
+	page, err := service.List(context.Background(), params)
+	require.NoError(t, err)
+	assert.Len(t, page.Items, 1)
+	assert.Equal(t, 2, page.TotalSize)
+	assert.NotEmpty(t, page.NextPageToken)
+
+	keyset, err := DecodePageToken(page.NextPageToken, params)
+	require.NoError(t, err)
+	require.NotNil(t, keyset)
+	assert.Equal(t, uint(2), keyset.ID)
+	assert.Equal(t, "джин", keyset.Name)
 }

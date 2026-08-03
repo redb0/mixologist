@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/redb0/mixologist/internal/domain"
@@ -22,7 +23,7 @@ type IngredientRepository interface {
 	Update(ctx context.Context, ingredient *domain.Ingredient) error
 	UpdateIcon(ctx context.Context, id uint, icon []byte) error
 	Delete(ctx context.Context, id uint) error
-	List(ctx context.Context) ([]*domain.Ingredient, error)
+	List(ctx context.Context, params domain.IngredientListParams, keyset *domain.IngredientListCursor) (domain.IngredientPage, bool, error)
 }
 
 type ingredientRepository struct {
@@ -37,7 +38,7 @@ func (r *ingredientRepository) Create(ctx context.Context, ingredient *domain.In
 	query := `--sql
 		INSERT INTO ingredients (name, description, unit_measurement, abv, ingredient_type, icon)
 		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id, created_at
+		RETURNING id, version, created_at, updated_at
 	`
 	err := r.db.QueryRowxContext(
 		ctx,
@@ -48,11 +49,12 @@ func (r *ingredientRepository) Create(ctx context.Context, ingredient *domain.In
 		ingredient.ABV,
 		ingredient.IngredientType,
 		ingredient.Icon,
-	).Scan(&ingredient.ID, &ingredient.CreatedAt)
+	).Scan(&ingredient.ID, &ingredient.Version, &ingredient.CreatedAt, &ingredient.UpdatedAt)
 	if err != nil {
 		return nil, ParseDBError(err)
 	}
 	ingredient.CreatedAt = ingredient.CreatedAt.UTC()
+	ingredient.UpdatedAt = ingredient.UpdatedAt.UTC()
 	return ingredient, nil
 }
 
@@ -66,7 +68,9 @@ func (r *ingredientRepository) GetByID(ctx context.Context, id uint) (*domain.In
 			abv,
 			ingredient_type,
 			(icon IS NOT NULL AND octet_length(icon) > 0) AS has_icon,
-			created_at
+			version,
+			created_at,
+			updated_at
 		FROM ingredients
 		WHERE id = $1
 	`
@@ -110,21 +114,42 @@ func (r *ingredientRepository) Update(ctx context.Context, ingredient *domain.In
 			description = :description,
 			unit_measurement = :unit_measurement,
 			abv = :abv,
-			ingredient_type = :ingredient_type
-		WHERE id = :id
+			ingredient_type = :ingredient_type,
+			version = version + 1,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = :id AND version = :version
+		RETURNING version, updated_at
 	`
-	result, err := r.db.NamedExecContext(ctx, query, ingredient)
+	rows, err := r.db.NamedQueryContext(ctx, query, ingredient)
 	if err != nil {
 		return ParseDBError(err)
 	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("ошибка получения количества обновленных строк: %w", err)
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ошибка закрытия rows: %v", err)
+		}
+	}()
+
+	if !rows.Next() {
+		var exists bool
+		if err := r.db.GetContext(
+			ctx,
+			&exists,
+			`SELECT EXISTS(SELECT 1 FROM ingredients WHERE id = $1)`,
+			ingredient.ID,
+		); err != nil {
+			return ParseDBError(err)
+		}
+		if !exists {
+			return domain.NewErrNotFound("Ингредиент не найден")
+		}
+		return domain.NewErrVersionConflict("конфликт версии ингредиента")
 	}
-	if rowsAffected == 0 {
-		return domain.NewErrNotFound("Ингредиент не найден")
+	if err := rows.Scan(&ingredient.Version, &ingredient.UpdatedAt); err != nil {
+		return fmt.Errorf("ошибка чтения обновлённого ингредиента: %w", err)
 	}
-	return nil
+	ingredient.UpdatedAt = ingredient.UpdatedAt.UTC()
+	return rows.Err()
 }
 
 func (r *ingredientRepository) UpdateIcon(ctx context.Context, id uint, icon []byte) error {
@@ -166,30 +191,39 @@ func (r *ingredientRepository) Delete(ctx context.Context, id uint) error {
 	return nil
 }
 
-func (r *ingredientRepository) List(ctx context.Context) ([]*domain.Ingredient, error) {
-	query := `--sql
-		SELECT
-			id,
-			name,
-			description,
-			unit_measurement,
-			abv,
-			ingredient_type,
-			(icon IS NOT NULL AND octet_length(icon) > 0) AS has_icon,
-			created_at
-		FROM ingredients
-		ORDER BY created_at DESC
-	`
+func (r *ingredientRepository) List(
+	ctx context.Context,
+	params domain.IngredientListParams,
+	keyset *domain.IngredientListCursor,
+) (domain.IngredientPage, bool, error) {
+	query, args := buildIngredientListQuery(params, keyset)
+	countQuery, countArgs := buildIngredientCountQuery(params.Filters)
+
+	var totalSize int
+	if err := r.db.GetContext(ctx, &totalSize, countQuery, countArgs...); err != nil {
+		return domain.IngredientPage{}, false, ParseDBError(err)
+	}
+
 	var ingredients []*models.Ingredient
-	err := r.db.SelectContext(ctx, &ingredients, query)
-	if err != nil {
-		return nil, fmt.Errorf("ошибка получения списка ингредиентов: %w", err)
+	if err := r.db.SelectContext(ctx, &ingredients, query, args...); err != nil {
+		return domain.IngredientPage{}, false, ParseDBError(err)
 	}
-	ingredientsDomain := make([]*domain.Ingredient, len(ingredients))
+
+	hasMore := len(ingredients) > params.PageSize
+	if hasMore {
+		ingredients = ingredients[:params.PageSize]
+	}
+
+	items := make([]domain.Ingredient, len(ingredients))
 	for i, ingredient := range ingredients {
-		ingredientsDomain[i] = toDomainIngredient(ingredient)
+		items[i] = *toDomainIngredient(ingredient)
 	}
-	return ingredientsDomain, nil
+
+	return domain.IngredientPage{
+		Items:         items,
+		NextPageToken: "",
+		TotalSize:     totalSize,
+	}, hasMore, nil
 }
 
 func toDomainIngredient(ingredient *models.Ingredient) *domain.Ingredient {
@@ -202,6 +236,8 @@ func toDomainIngredient(ingredient *models.Ingredient) *domain.Ingredient {
 		IngredientType:  domain.IngredientTypeEnum(ingredient.IngredientType),
 		Icon:            ingredient.Icon,
 		HasIcon:         ingredient.HasIcon,
+		Version:         ingredient.Version,
 		CreatedAt:       ingredient.CreatedAt.UTC(),
+		UpdatedAt:       ingredient.UpdatedAt.UTC(),
 	}
 }

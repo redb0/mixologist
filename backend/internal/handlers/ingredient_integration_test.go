@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -76,10 +77,11 @@ func (suite *IngredientHandlerTestSuite) TestListIngredients_200_Empty() {
 
 	suite.Equal(http.StatusOK, w.Code)
 
-	var response []IngredientResponse
+	var response IngredientListResponse
 	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
-	suite.Empty(response)
-	suite.Equal("[]", strings.TrimSpace(w.Body.String()))
+	suite.Empty(response.Ingredients)
+	suite.Empty(response.NextPageToken)
+	suite.Equal(0, response.TotalSize)
 }
 
 func (suite *IngredientHandlerTestSuite) TestListIngredients_200() {
@@ -108,25 +110,132 @@ func (suite *IngredientHandlerTestSuite) TestListIngredients_200() {
 
 	suite.Equal(http.StatusOK, w.Code)
 
-	var response []IngredientResponse
+	var response IngredientListResponse
 	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
-	suite.Require().Len(response, 2)
+	suite.Require().Len(response.Ingredients, 2)
+	suite.Equal(2, response.TotalSize)
+	suite.Empty(response.NextPageToken)
 
 	// ORDER BY created_at DESC — последний созданный первым
-	suite.Equal(withoutIcon.ID, response[0].ID)
-	suite.Equal("Ром", response[0].Name)
-	suite.Equal("Без иконки", response[0].Description)
-	suite.Equal(domain.UnitMl, response[0].UnitMeasurement)
-	suite.Equal(domain.Strong, response[0].ABV)
-	suite.Equal(domain.StrongPart, response[0].IngredientType)
-	suite.False(response[0].HasIcon)
-	suite.False(response[0].CreatedAt.IsZero())
+	suite.Equal(withoutIcon.ID, response.Ingredients[0].ID)
+	suite.Equal("Ром", response.Ingredients[0].Name)
+	suite.Equal("Без иконки", response.Ingredients[0].Description)
+	suite.Equal(domain.UnitMl, response.Ingredients[0].UnitMeasurement)
+	suite.Equal(domain.Strong, response.Ingredients[0].ABV)
+	suite.Equal(domain.StrongPart, response.Ingredients[0].IngredientType)
+	suite.False(response.Ingredients[0].HasIcon)
+	suite.False(response.Ingredients[0].CreatedAt.IsZero())
 
-	suite.Equal(withIcon.ID, response[1].ID)
-	suite.Equal("Джин", response[1].Name)
-	suite.Equal("С иконкой", response[1].Description)
-	suite.True(response[1].HasIcon)
-	suite.False(response[1].CreatedAt.IsZero())
+	suite.Equal(withIcon.ID, response.Ingredients[1].ID)
+	suite.Equal("Джин", response.Ingredients[1].Name)
+	suite.Equal("С иконкой", response.Ingredients[1].Description)
+	suite.True(response.Ingredients[1].HasIcon)
+	suite.False(response.Ingredients[1].CreatedAt.IsZero())
+}
+
+func (suite *IngredientHandlerTestSuite) TestListIngredients_200_PaginationAndFilter() {
+	_, err := suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Джин",
+		Description:     "Первый",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Strong,
+		IngredientType:  domain.StrongPart,
+	})
+	suite.Require().NoError(err)
+	_, err = suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Ром",
+		Description:     "Второй",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Strong,
+		IngredientType:  domain.StrongPart,
+	})
+	suite.Require().NoError(err)
+	_, err = suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Тоник",
+		Description:     "Третий",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Free,
+		IngredientType:  domain.FreePart,
+	})
+	suite.Require().NoError(err)
+
+	firstPageW := httptest.NewRecorder()
+	firstPageReq := httptest.NewRequest(http.MethodGet, "/ingredients?pageSize=2&sort=created_at&order=desc", nil)
+	suite.router.ServeHTTP(firstPageW, firstPageReq)
+
+	suite.Equal(http.StatusOK, firstPageW.Code)
+	var firstPage IngredientListResponse
+	suite.Require().NoError(json.Unmarshal(firstPageW.Body.Bytes(), &firstPage))
+	suite.Len(firstPage.Ingredients, 2)
+	suite.Equal(3, firstPage.TotalSize)
+	suite.NotEmpty(firstPage.NextPageToken)
+
+	secondPageW := httptest.NewRecorder()
+	secondPageReq := httptest.NewRequest(
+		http.MethodGet,
+		"/ingredients?pageSize=2&sort=created_at&order=desc&pageToken="+firstPage.NextPageToken,
+		nil,
+	)
+	suite.router.ServeHTTP(secondPageW, secondPageReq)
+
+	suite.Equal(http.StatusOK, secondPageW.Code)
+	var secondPage IngredientListResponse
+	suite.Require().NoError(json.Unmarshal(secondPageW.Body.Bytes(), &secondPage))
+	suite.Len(secondPage.Ingredients, 1)
+	suite.Equal(3, secondPage.TotalSize)
+	suite.Empty(secondPage.NextPageToken)
+
+	filterW := httptest.NewRecorder()
+	filterParams := url.Values{}
+	filterParams.Set("name", "ник")
+	filterParams.Set("abv", "безалкогольный")
+	filterParams.Set("ingredient_type", "безалкогольная часть")
+	filterReq := httptest.NewRequest(http.MethodGet, "/ingredients?"+filterParams.Encode(), nil)
+	suite.router.ServeHTTP(filterW, filterReq)
+
+	suite.Equal(http.StatusOK, filterW.Code)
+	var filtered IngredientListResponse
+	suite.Require().NoError(json.Unmarshal(filterW.Body.Bytes(), &filtered))
+	suite.Len(filtered.Ingredients, 1)
+	suite.Equal("Тоник", filtered.Ingredients[0].Name)
+}
+
+func (suite *IngredientHandlerTestSuite) TestListIngredients_400_InvalidQueryParams() {
+	cases := []struct {
+		name       string
+		path       string
+		wantErrMsg string
+	}{
+		{name: "pageSize not number", path: "/ingredients?pageSize=abc", wantErrMsg: "недопустимое значение pageSize"},
+		{name: "pageSize zero", path: "/ingredients?pageSize=0", wantErrMsg: "pageSize должен быть от 1 до 100"},
+		{name: "pageSize too large", path: "/ingredients?pageSize=101", wantErrMsg: "pageSize должен быть от 1 до 100"},
+		{name: "invalid sort", path: "/ingredients?sort=invalid", wantErrMsg: "недопустимое значение sort"},
+		{name: "invalid order", path: "/ingredients?order=invalid", wantErrMsg: "недопустимое значение order"},
+		{name: "invalid abv", path: "/ingredients?abv=invalid", wantErrMsg: "недопустимое значение abv"},
+		{
+			name:       "invalid ingredient_type",
+			path:       "/ingredients?ingredient_type=invalid",
+			wantErrMsg: "недопустимое значение ingredient_type",
+		},
+		{
+			name:       "invalid page token",
+			path:       "/ingredients?pageToken=not-a-token",
+			wantErrMsg: "Некорректный или несовместимый pageToken",
+		},
+	}
+
+	for _, tt := range cases {
+		suite.Run(tt.name, func() {
+			w := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			suite.router.ServeHTTP(w, request)
+
+			suite.Equal(http.StatusBadRequest, w.Code)
+			var response gin.H
+			suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+			suite.Equal(tt.wantErrMsg, response["error"])
+		})
+	}
 }
 
 func (suite *IngredientHandlerTestSuite) TestGetIngredientIcon_200() {

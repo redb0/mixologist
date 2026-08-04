@@ -38,7 +38,9 @@ export function apiSortToDataGrid(
   return [{ field: sort === "name" ? "name" : "created_at", sort: order }];
 }
 
-export function normalizeListParams(params: IngredientListParams): IngredientListParams {
+export function normalizeListParams(
+  params: IngredientListParams,
+): IngredientListParams {
   return {
     pageSize: params.pageSize,
     pageToken: params.pageToken ?? "",

@@ -1,9 +1,5 @@
 import type { components } from "../../shared/api/generated";
-import {
-  ABV_OPTIONS,
-  INGREDIENT_TYPES,
-  UNIT_MEASUREMENTS,
-} from "./constants";
+import { ABV_OPTIONS, INGREDIENT_TYPES, UNIT_MEASUREMENTS } from "./constants";
 
 export { ABV_OPTIONS, INGREDIENT_TYPES, UNIT_MEASUREMENTS };
 

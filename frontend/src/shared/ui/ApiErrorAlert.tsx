@@ -2,7 +2,8 @@ import { Alert, AlertTitle, Button, Stack } from "@mui/material";
 import { ApiError } from "../api/client";
 
 const CODE_MESSAGES: Record<string, string> = {
-  UNAUTHORIZED: "Требуется вход в систему. Авторизация появится в следующем этапе.",
+  UNAUTHORIZED:
+    "Требуется вход в систему. Авторизация появится в следующем этапе.",
   FORBIDDEN: "Недостаточно прав для выполнения операции.",
   VERSION_CONFLICT:
     "Данные были изменены другим запросом. Обновите страницу и попробуйте снова.",

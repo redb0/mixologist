@@ -51,10 +51,9 @@ export function IngredientDetailPage() {
     },
     onError: (error) => {
       if (error instanceof ApiError && error.code === "RESOURCE_IN_USE") {
-        enqueueSnackbar(
-          "Ингредиент используется и не может быть удалён",
-          { variant: "error" },
-        );
+        enqueueSnackbar("Ингредиент используется и не может быть удалён", {
+          variant: "error",
+        });
         return;
       }
       enqueueSnackbar(error.message, { variant: "error" });

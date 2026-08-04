@@ -29,7 +29,9 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <Stack spacing={2} sx={{ py: 4 }}>
           <Alert severity="error">
-            <Typography variant="subtitle1">Неожиданная ошибка интерфейса</Typography>
+            <Typography variant="subtitle1">
+              Неожиданная ошибка интерфейса
+            </Typography>
             {this.state.error.message}
           </Alert>
           <Button onClick={this.reset}>Попробовать снова</Button>

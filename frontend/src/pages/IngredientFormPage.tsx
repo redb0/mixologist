@@ -266,7 +266,10 @@ export function IngredientFormPage() {
         </Paper>
       )}
 
-      <Dialog open={versionConflictOpen} onClose={() => setVersionConflictOpen(false)}>
+      <Dialog
+        open={versionConflictOpen}
+        onClose={() => setVersionConflictOpen(false)}
+      >
         <DialogTitle>Конфликт версии</DialogTitle>
         <DialogContent>
           <DialogContentText>

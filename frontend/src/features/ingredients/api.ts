@@ -1,4 +1,8 @@
-import { API_BASE_URL, apiRequest, buildQueryString } from "../../shared/api/client";
+import {
+  API_BASE_URL,
+  apiRequest,
+  buildQueryString,
+} from "../../shared/api/client";
 import type {
   CreateIngredientRequest,
   Ingredient,

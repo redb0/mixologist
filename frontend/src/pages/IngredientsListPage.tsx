@@ -189,8 +189,7 @@ export function IngredientsListPage() {
     setSortModel(model);
   };
 
-  const apiError =
-    query.error instanceof ApiError ? query.error : undefined;
+  const apiError = query.error instanceof ApiError ? query.error : undefined;
 
   return (
     <Stack spacing={3}>
@@ -246,9 +245,7 @@ export function IngredientsListPage() {
           <Select
             value={abvFilter}
             label="Крепость"
-            onChange={(event) =>
-              setAbvFilter(event.target.value as Abv | "")
-            }
+            onChange={(event) => setAbvFilter(event.target.value as Abv | "")}
           >
             <MenuItem value="">Любая крепость</MenuItem>
             {ABV_OPTIONS.map((value) => (

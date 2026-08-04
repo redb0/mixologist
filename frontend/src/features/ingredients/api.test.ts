@@ -60,7 +60,12 @@ describe("ingredients api", () => {
     );
 
     await expect(listIngredients(DEFAULT_LIST_PARAMS)).rejects.toEqual(
-      new ApiError(500, "INTERNAL_ERROR", "Внутренняя ошибка сервера", "req-42"),
+      new ApiError(
+        500,
+        "INTERNAL_ERROR",
+        "Внутренняя ошибка сервера",
+        "req-42",
+      ),
     );
   });
 });

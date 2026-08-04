@@ -69,14 +69,17 @@ export async function apiRequest<T>(
     let requestId: string | undefined;
     let details: ErrorDetail[] | undefined;
     try {
-      const body = (await response.json()) as StructuredErrorBody | LegacyErrorBody;
+      const body = (await response.json()) as
+        StructuredErrorBody | LegacyErrorBody;
       if (
         body.error &&
         typeof body.error === "object" &&
         "code" in body.error &&
         body.error.code
       ) {
-        const structured = body.error as NonNullable<StructuredErrorBody["error"]>;
+        const structured = body.error as NonNullable<
+          StructuredErrorBody["error"]
+        >;
         code = structured.code ?? code;
         message = structured.message ?? message;
         requestId = structured.request_id;

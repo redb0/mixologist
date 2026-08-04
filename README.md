@@ -81,7 +81,7 @@ go run ./cmd/api
 Проверка:
 
 ```bash
-curl -X POST http://localhost:8080/ingredients \
+curl -X POST http://localhost:8080/api/v1/ingredients \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Джин",
@@ -94,7 +94,7 @@ curl -X POST http://localhost:8080/ingredients \
 
 ### 5. Запуск административного frontend
 
-Frontend использует Vite proxy `/api` на локальный backend `http://localhost:8080`:
+Frontend использует Vite proxy `/api` на локальный backend `http://localhost:8080` (пути `/api/v1/...` проксируются без rewrite):
 
 ```bash
 cd frontend
@@ -146,7 +146,7 @@ make migrate-up DB_URL='postgres://postgres:postgres@localhost:5432/mixologist?s
 make help
 ```
 
-## Тесты
+## Тесты и локальные проверки
 
 Из каталога `backend`:
 
@@ -155,16 +155,24 @@ cd backend
 go test ./...
 ```
 
-Интеграционные тесты в `internal/repository/` поднимают PostgreSQL через **testcontainers** — нужен запущенный **Docker**.
+Интеграционные тесты в `internal/repository/` и `internal/contract/` поднимают PostgreSQL через **testcontainers** — нужен запущенный **Docker**.
+
+Локальный набор проверок (как в CI):
+
+```bash
+make ci-local
+```
 
 Frontend:
 
 ```bash
 cd frontend
+npm run format:check
 npm run lint
 npm run typecheck
 npm test
 npm run build
+npm run api:check
 ```
 
 ## TODO
@@ -202,9 +210,9 @@ npm run build
 Тех. долг:
 
 - [x] При получении ингредиента иконка загружается целиком, хотя нужен только флаг
+- [x] Конкурентное обновление ингредиента (optimistic locking через `version`)
+- [x] Пагинация списка ингридиентов через keyset `pageToken`/`pageSize`
+- [x] Фильтрация ингридиентов (`name`, `abv`, `ingredient_type`)
+- [x] Парсинг ошибок в List репозитория ингридиентов
 - [ ] Добавить таймзону UTC к полю `created_at` ингридиента
-- [ ] Конкурентное обновление ингредиента
-- [ ] Пагинация списка ингридиентов через курсор
 - [ ] Кеширование ингридиентов?
-- [ ] Фильтрация ингридиентов
-- [ ] Парсинг ошибок в List репозитория ингридиентов не единообразен

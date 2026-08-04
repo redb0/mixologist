@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help migrate-create migrate-up migrate-down lint lint-go lint-frontend gofmt golangci-lint
+.PHONY: help migrate-create migrate-up migrate-down lint lint-go lint-frontend gofmt golangci-lint api-lint api-generate api-check test-backend test-frontend test-contract ci-local
 
 NAME ?=
 DOWN_STEPS ?= 1
@@ -8,6 +8,7 @@ MIGRATIONS_DIR := ./backend/migrations
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
 GOLANGCI_LINT_VERSION := v2.4.0
+API_DIR := api
 
 # DB_URL: приоритет — аргумент make (DB_URL=...), иначе переменная окружения;
 # если не задано, подхватывается .env в корне репозитория (при наличии).
@@ -40,6 +41,27 @@ help:
 	@echo ""
 	@echo "  make lint-frontend"
 	@echo "      npm run lint и npm run typecheck для frontend."
+	@echo ""
+	@echo "  make api-lint"
+	@echo "      OpenAPI lint через redocly."
+	@echo ""
+	@echo "  make api-generate"
+	@echo "      Генерация frontend DTO из OpenAPI."
+	@echo ""
+	@echo "  make api-check"
+	@echo "      Проверка, что generated.ts совпадает со spec."
+	@echo ""
+	@echo "  make test-backend"
+	@echo "      go test -race ./backend/..."
+	@echo ""
+	@echo "  make test-frontend"
+	@echo "      npm run test в frontend."
+	@echo ""
+	@echo "  make test-contract"
+	@echo "      Contract-тесты OpenAPI ↔ Go."
+	@echo ""
+	@echo "  make ci-local"
+	@echo "      Локальный набор проверок CI."
 
 migrate-create:
 	@if [ -z "$(NAME)" ]; then \
@@ -84,3 +106,24 @@ golangci-lint:
 lint-frontend:
 	cd "$(FRONTEND_DIR)" && npm run lint
 	cd "$(FRONTEND_DIR)" && npm run typecheck
+
+api-lint:
+	cd "$(FRONTEND_DIR)" && npm run api:lint
+
+api-generate:
+	cd "$(FRONTEND_DIR)" && npm run api:generate
+
+api-check:
+	cd "$(FRONTEND_DIR)" && npm run api:check
+
+test-backend:
+	cd "$(BACKEND_DIR)" && go test -race -timeout=10m ./...
+
+test-frontend:
+	cd "$(FRONTEND_DIR)" && npm run test
+
+test-contract:
+	cd "$(BACKEND_DIR)" && go test -race -timeout=10m ./internal/contract/...
+
+ci-local: lint api-lint api-check test-backend test-contract test-frontend
+	cd "$(FRONTEND_DIR)" && npm run format:check && npm run build

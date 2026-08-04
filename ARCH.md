@@ -42,20 +42,25 @@ flowchart TB
 
 ```text
 backend/
-├── cmd/api/main.go              # точка входа, wiring DI и маршруты
+├── cmd/api/main.go              # config, DB, router
 ├── internal/
-│   ├── domain/                  # Сущности и domain-ошибки
-│   ├── handlers/                # HTTP-контроллеры, DTO, MapError/RespondError
+│   ├── config/                  # HTTP_ADDR, GIN_MODE, LOG_LEVEL
+│   ├── middleware/              # request ID, access log, recovery
+│   ├── router/                  # /health и group /api/v1
+│   ├── contract/                # OpenAPI contract-тесты
+│   ├── domain/                  # сущности и domain-ошибки
+│   ├── handlers/                # HTTP-контроллеры, DTO, structured errors
 │   ├── models/                  # модели базы данных
 │   ├── repository/              # реализация доступа к БД
 │   ├── services/                # бизнес-логика
 │   └── testutil/                # общие хелперы для интеграционных тестов
 └── migrations/                  # SQL-миграции
 frontend/
-├── src/app/                     # тема и инфраструктура приложения
-├── src/features/ingredients/    # типы, API и форма ингредиентов
-├── src/pages/                   # страницы списка, карточки и редактирования
-└── nginx.conf                   # SPA fallback и reverse proxy API
+├── src/shared/api/generated.ts  # OpenAPI DTO
+├── src/app/                     # тема, ErrorBoundary
+├── src/features/ingredients/    # API, listState, форма
+├── src/pages/                   # server-mode DataGrid
+└── nginx.conf                   # SPA fallback и reverse proxy /api
 ```
 
 ## Сущности
@@ -65,13 +70,15 @@ frontend/
 | Атрибут            | Описание              | Обязательность | Ограничения                                                                                                               |
 |--------------------|-----------------------|----------------|---------------------------------------------------------------------------------------------------------------------------|
 | `id`               | Идентификатор         | Да             | Идентификатор                                                                                                             |
-| `name`             | Имя                   | Да             | Уникальное (case-sensitive в Postgres), 3–512 символов                                                                    |
+| `name`             | Имя                   | Да             | Уникальное (case-insensitive через `LOWER(name)`), 3–512 символов                                                         |
 | `description`      | Описание              | Нет            | до 1024 символов                                                                                                          |
 | `unit_measurement` | Единица измерения     | Да             | `мл`, `гр`, `шт`, `дэш`                                                                                                   |
 | `abv`              | Крепость              | Да             | `безалкогольный`, `слабоалкогольный`, `крепкий`                                                                           |
 | `ingredient_type`  | Тип                   | Да             | `крепкая часть`, `безалкогольная часть`, `вермут`, `вино`, `ликер`, `биттер`, `сироп`, `другое`, `фрукт`, `овощ`, `ягода` |
 | `icon`             | Иконка                | Нет            | бинарные данные (BYTEA), загружается отдельно                                                                             |
-| `created_at`       | Дата и время создания | Да             | Текущее время по умолчанию                                                                                                |
+| `created_at`       | Дата и время создания | Да             | TIMESTAMPTZ, UTC в API                                                                                                    |
+| `updated_at`       | Дата обновления       | Да             | TIMESTAMPTZ                                                                                                               |
+| `version`          | Версия записи         | Да             | Optimistic locking, default `1`                                                                                           |
 
 В JSON API вместо `icon` отдаётся вычисляемое поле `has_icon` (`true`, если `len(icon) > 0`).
 
@@ -86,18 +93,23 @@ frontend/
 
 ### Сводка endpoints
 
-| Метод    | Путь                    | Описание                    |
-|----------|-------------------------|-----------------------------|
-| `GET`    | `/ingredients`          | Список ингредиентов         |
-| `GET`    | `/health`               | Состояние backend и БД      |
-| `GET`    | `/ingredients/:id`      | Ингредиент по ID            |
-| `GET`    | `/ingredients/:id/icon` | Получить иконку             |
-| `POST`   | `/ingredients`          | Создать ингредиент          |
-| `PATCH`  | `/ingredients/:id`      | Частичное обновление        |
-| `DELETE` | `/ingredients/:id`      | Удалить ингредиент          |
-| `PUT`    | `/ingredients/:id/icon` | Загрузить иконку (PNG/JPEG) |
+Продуктовый API: `/api/v1`. Operational health: `GET /health`.
 
-Общий response-объект ингредиента (`IngredientResponse`):
+| Метод    | Путь                              | Описание                    |
+|----------|-----------------------------------|-----------------------------|
+| `GET`    | `/health`                         | Состояние backend и БД      |
+| `GET`    | `/api/v1/ingredients`             | Список ингредиентов         |
+| `GET`    | `/api/v1/ingredients/:id`         | Ингредиент по ID            |
+| `GET`    | `/api/v1/ingredients/:id/icon`    | Получить иконку             |
+| `POST`   | `/api/v1/ingredients`             | Создать ингредиент          |
+| `PATCH`  | `/api/v1/ingredients/:id`         | Частичное обновление        |
+| `DELETE` | `/api/v1/ingredients/:id`         | Удалить ингредиент          |
+| `PUT`    | `/api/v1/ingredients/:id/icon`    | Загрузить иконку (PNG/JPEG) |
+
+Ошибки: envelope `{"error":{"code","message","request_id","details?"}}` + заголовок `X-Request-ID`.
+Контракт описан в `api/openapi.yaml`; frontend DTO генерируются через `openapi-typescript`.
+
+Общий response-объект ингредиента:
 
 ```json
 {
@@ -108,7 +120,9 @@ frontend/
   "abv": "крепкий",
   "ingredient_type": "крепкая часть",
   "has_icon": false,
-  "created_at": "2026-05-31T12:00:00Z"
+  "version": 1,
+  "created_at": "2026-05-31T12:00:00Z",
+  "updated_at": "2026-05-31T12:00:00Z"
 }
 ```
 
@@ -119,43 +133,21 @@ frontend/
 - `200 OK`: `{"status":"ok"}`
 - `503 Service Unavailable`: `{"status":"unavailable"}`
 
-### Список ингредиентов `GET /ingredients`
+### Список ингредиентов `GET /api/v1/ingredients`
 
-Порядок: `created_at DESC` (новые первыми). Без пагинации.
+Query: `pageSize` (default 25), `pageToken`, `sort` (`created_at`|`name`), `order`, фильтры `name`, `abv`, `ingredient_type`.
 
-**Response** `200 OK` — массив `IngredientResponse` (пустой список — `[]`):
+**Response** `200 OK`:
 
 ```json
-[
-  {
-    "id": 2,
-    "name": "Ром",
-    "description": "Белый ром",
-    "unit_measurement": "мл",
-    "abv": "крепкий",
-    "ingredient_type": "крепкая часть",
-    "has_icon": false,
-    "created_at": "2026-05-31T12:01:00Z"
-  },
-  {
-    "id": 1,
-    "name": "Джин",
-    "description": "London dry gin",
-    "unit_measurement": "мл",
-    "abv": "крепкий",
-    "ingredient_type": "крепкая часть",
-    "has_icon": true,
-    "created_at": "2026-05-31T12:00:00Z"
-  }
-]
+{
+  "ingredients": [/* Ingredient */],
+  "nextPageToken": "",
+  "totalSize": 42
+}
 ```
 
-**Коды ответов:**
-
-| Код   | Условие                                |
-|-------|----------------------------------------|
-| `200` | Список получен (в т.ч. пустой)         |
-| `500` | Внутренняя ошибка (БД, инфраструктура) |
+Сортировка по умолчанию: `created_at DESC`. Пагинация на основе курсора.
 
 ### Получить ингредиент `GET /ingredients/:id`
 

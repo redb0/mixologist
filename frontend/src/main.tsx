@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SnackbarProvider } from "notistack";
 import "./index.css";
 import App from "./App.tsx";
+import { ErrorBoundary } from "./app/ErrorBoundary";
 import { theme } from "./app/theme";
 
 const queryClient = new QueryClient({
@@ -22,7 +23,9 @@ createRoot(document.getElementById("root")!).render(
       <CssBaseline />
       <QueryClientProvider client={queryClient}>
         <SnackbarProvider maxSnack={3} autoHideDuration={4000}>
-          <App />
+          <ErrorBoundary>
+            <App />
+          </ErrorBoundary>
         </SnackbarProvider>
       </QueryClientProvider>
     </ThemeProvider>

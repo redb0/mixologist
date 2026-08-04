@@ -27,6 +27,8 @@ import {
   ingredientIconUrl,
   ingredientKeys,
 } from "../features/ingredients/api";
+import { ApiError } from "../shared/api/client";
+import { ApiErrorAlert } from "../shared/ui/ApiErrorAlert";
 
 export function IngredientDetailPage() {
   const { id: idParam } = useParams();
@@ -43,11 +45,20 @@ export function IngredientDetailPage() {
   const remove = useMutation({
     mutationFn: () => deleteIngredient(id),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ingredientKeys.all });
+      await queryClient.invalidateQueries({ queryKey: ingredientKeys.lists() });
       enqueueSnackbar("Ингредиент удалён", { variant: "success" });
       navigate("/ingredients");
     },
-    onError: (error) => enqueueSnackbar(error.message, { variant: "error" }),
+    onError: (error) => {
+      if (error instanceof ApiError && error.code === "RESOURCE_IN_USE") {
+        enqueueSnackbar(
+          "Ингредиент используется и не может быть удалён",
+          { variant: "error" },
+        );
+        return;
+      }
+      enqueueSnackbar(error.message, { variant: "error" });
+    },
   });
 
   if (!isValidID) {
@@ -61,9 +72,14 @@ export function IngredientDetailPage() {
     );
   }
   if (query.isError) {
+    const apiError = query.error instanceof ApiError ? query.error : undefined;
     return (
       <Stack spacing={2}>
-        <Alert severity="error">{query.error.message}</Alert>
+        {apiError ? (
+          <ApiErrorAlert error={apiError} onRetry={() => query.refetch()} />
+        ) : (
+          <Alert severity="error">{query.error.message}</Alert>
+        )}
         <Button
           component={RouterLink}
           to="/ingredients"

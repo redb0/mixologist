@@ -6,6 +6,11 @@ import {
   Box,
   Button,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   Paper,
   Stack,
   Typography,
@@ -28,6 +33,8 @@ import type {
   UpdateIngredientRequest,
 } from "../features/ingredients/types";
 import { EMPTY_INGREDIENT_VALUES } from "../features/ingredients/types";
+import { ApiError } from "../shared/api/client";
+import { ApiErrorAlert } from "../shared/ui/ApiErrorAlert";
 
 const MAX_ICON_SIZE = 512 * 1024;
 const ALLOWED_ICON_TYPES = ["image/png", "image/jpeg"];
@@ -42,6 +49,7 @@ export function IngredientFormPage() {
   const [iconVersion, setIconVersion] = useState(0);
   const [selectedIcon, setSelectedIcon] = useState<File>();
   const [previewUrl, setPreviewUrl] = useState<string>();
+  const [versionConflictOpen, setVersionConflictOpen] = useState(false);
 
   useEffect(() => {
     if (!selectedIcon) {
@@ -77,13 +85,15 @@ export function IngredientFormPage() {
       if (!isEdit) {
         return createIngredient(values);
       }
-      const patch: UpdateIngredientRequest = {};
+      const patch: UpdateIngredientRequest = {
+        version: query.data!.version,
+      };
       for (const key of Object.keys(values) as (keyof IngredientFormValues)[]) {
         if (values[key] !== defaultValues[key]) {
           Object.assign(patch, { [key]: values[key] });
         }
       }
-      if (Object.keys(patch).length === 0) {
+      if (Object.keys(patch).length === 1) {
         return query.data!;
       }
       return updateIngredient(id, patch);
@@ -97,7 +107,7 @@ export function IngredientFormPage() {
       setIconVersion((version) => version + 1);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ingredientKeys.detail(id) }),
-        queryClient.invalidateQueries({ queryKey: ingredientKeys.all }),
+        queryClient.invalidateQueries({ queryKey: ingredientKeys.lists() }),
       ]);
       enqueueSnackbar("Иконка обновлена", { variant: "success" });
     },
@@ -107,7 +117,7 @@ export function IngredientFormPage() {
   const submit = async (values: IngredientFormValues) => {
     try {
       const ingredient = await save.mutateAsync(values);
-      await queryClient.invalidateQueries({ queryKey: ingredientKeys.all });
+      await queryClient.invalidateQueries({ queryKey: ingredientKeys.lists() });
       queryClient.setQueryData(
         ingredientKeys.detail(ingredient.id),
         ingredient,
@@ -117,13 +127,21 @@ export function IngredientFormPage() {
       });
       navigate(`/ingredients/${ingredient.id}`);
     } catch (error) {
+      if (error instanceof ApiError && error.code === "VERSION_CONFLICT") {
+        setVersionConflictOpen(true);
+        return;
+      }
+      if (error instanceof ApiError && error.code === "ALREADY_EXISTS") {
+        enqueueSnackbar("Ингредиент с таким именем уже существует", {
+          variant: "error",
+        });
+        return;
+      }
       enqueueSnackbar(
         error instanceof Error
           ? error.message
           : "Не удалось сохранить ингредиент",
-        {
-          variant: "error",
-        },
+        { variant: "error" },
       );
     }
   };
@@ -156,7 +174,12 @@ export function IngredientFormPage() {
     );
   }
   if (isEdit && query.isError) {
-    return <Alert severity="error">{query.error.message}</Alert>;
+    const apiError = query.error instanceof ApiError ? query.error : undefined;
+    return apiError ? (
+      <ApiErrorAlert error={apiError} onRetry={() => query.refetch()} />
+    ) : (
+      <Alert severity="error">{query.error.message}</Alert>
+    );
   }
 
   return (
@@ -242,6 +265,26 @@ export function IngredientFormPage() {
           </Stack>
         </Paper>
       )}
+
+      <Dialog open={versionConflictOpen} onClose={() => setVersionConflictOpen(false)}>
+        <DialogTitle>Конфликт версии</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Ингредиент был изменён другим запросом. Загрузить актуальные данные?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setVersionConflictOpen(false)}>Отмена</Button>
+          <Button
+            onClick={async () => {
+              setVersionConflictOpen(false);
+              await query.refetch();
+            }}
+          >
+            Обновить данные
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 }

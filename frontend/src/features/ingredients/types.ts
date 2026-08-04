@@ -1,37 +1,22 @@
-export const UNIT_MEASUREMENTS = ["мл", "гр", "шт", "дэш"] as const;
-export const ABV_OPTIONS = [
-  "безалкогольный",
-  "слабоалкогольный",
-  "крепкий",
-] as const;
-export const INGREDIENT_TYPES = [
-  "крепкая часть",
-  "безалкогольная часть",
-  "вермут",
-  "вино",
-  "ликер",
-  "биттер",
-  "сироп",
-  "другое",
-  "фрукт",
-  "овощ",
-  "ягода",
-] as const;
+import type { components } from "../../shared/api/generated";
+import {
+  ABV_OPTIONS,
+  INGREDIENT_TYPES,
+  UNIT_MEASUREMENTS,
+} from "./constants";
 
-export type UnitMeasurement = (typeof UNIT_MEASUREMENTS)[number];
-export type Abv = (typeof ABV_OPTIONS)[number];
-export type IngredientType = (typeof INGREDIENT_TYPES)[number];
+export { ABV_OPTIONS, INGREDIENT_TYPES, UNIT_MEASUREMENTS };
 
-export interface Ingredient {
-  id: number;
-  name: string;
-  description: string;
-  unit_measurement: UnitMeasurement;
-  abv: Abv;
-  ingredient_type: IngredientType;
-  has_icon: boolean;
-  created_at: string;
-}
+export type UnitMeasurement = components["schemas"]["UnitMeasurement"];
+export type Abv = components["schemas"]["Abv"];
+export type IngredientType = components["schemas"]["IngredientType"];
+export type Ingredient = components["schemas"]["Ingredient"];
+export type IngredientListResponse =
+  components["schemas"]["IngredientListResponse"];
+export type CreateIngredientRequest =
+  components["schemas"]["CreateIngredientRequest"];
+export type UpdateIngredientRequest =
+  components["schemas"]["UpdateIngredientRequest"];
 
 export interface IngredientFormValues {
   name: string;
@@ -49,5 +34,19 @@ export const EMPTY_INGREDIENT_VALUES: IngredientFormValues = {
   ingredient_type: "другое",
 };
 
-export type CreateIngredientRequest = IngredientFormValues;
-export type UpdateIngredientRequest = Partial<IngredientFormValues>;
+export type IngredientSortField = components["schemas"]["IngredientSortField"];
+export type SortOrder = components["schemas"]["SortOrder"];
+
+export interface IngredientListFilters {
+  name?: string;
+  ingredient_type?: IngredientType;
+  abv?: Abv;
+}
+
+export interface IngredientListParams {
+  pageSize: number;
+  pageToken?: string;
+  sort: IngredientSortField;
+  order: SortOrder;
+  filters: IngredientListFilters;
+}

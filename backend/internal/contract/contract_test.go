@@ -28,10 +28,10 @@ import (
 
 type ContractTestSuite struct {
 	suite.Suite
-	ctx         context.Context
-	pgContainer *testutil.PostgresContainer
-	router      *gin.Engine
-	doc         *openapi3.T
+	ctx           context.Context
+	pgContainer   *testutil.PostgresContainer
+	router        *gin.Engine
+	doc           *openapi3.T
 	openapiRouter routers.Router
 }
 

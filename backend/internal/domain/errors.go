@@ -4,12 +4,12 @@ import "errors"
 
 // ErrNotFound — sentinel для ошибок «ресурс не найден» (errors.Is(err, ErrNotFound)).
 var (
-	ErrNotFound            = errors.New("not found")
-	ErrAlreadyExists       = errors.New("already exists")
-	ErrVersionConflict     = errors.New("version conflict")
-	ErrResourceInUse       = errors.New("resource in use")
-	ErrInvalidID           = errors.New("invalid id")
-	ErrServiceUnavailable  = errors.New("service unavailable")
+	ErrNotFound           = errors.New("not found")
+	ErrAlreadyExists      = errors.New("already exists")
+	ErrVersionConflict    = errors.New("version conflict")
+	ErrResourceInUse      = errors.New("resource in use")
+	ErrInvalidID          = errors.New("invalid id")
+	ErrServiceUnavailable = errors.New("service unavailable")
 
 	ErrInvalidIngredientData = errors.New("invalid ingredient data")
 	ErrInvalidPageToken      = errors.New("invalid page token")

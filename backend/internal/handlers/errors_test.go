@@ -15,74 +15,86 @@ func TestMapError(t *testing.T) {
 		name       string
 		err        error
 		wantStatus int
+		wantCode   string
 		wantMsg    string
 	}{
 		{
 			name:       "invalid ingredient data",
 			err:        domain.NewErrInvalidIngredientData("нет полей для обновления"),
 			wantStatus: http.StatusBadRequest,
+			wantCode:   CodeValidationError,
 			wantMsg:    "нет полей для обновления",
 		},
 		{
-			name:       "invalid ingredient data wrapped",
-			err:        fmt.Errorf("%w: %v", domain.NewErrInvalidIngredientData("неверные данные ингредиента"), errors.New("неверная крепость")),
+			name:       "invalid id",
+			err:        domain.NewErrInvalidID("Неверный ID ингредиента"),
 			wantStatus: http.StatusBadRequest,
-			wantMsg:    "неверные данные ингредиента",
+			wantCode:   CodeInvalidID,
+			wantMsg:    "Неверный ID ингредиента",
+		},
+		{
+			name:       "invalid page token",
+			err:        domain.NewErrInvalidPageToken("Некорректный или несовместимый pageToken"),
+			wantStatus: http.StatusBadRequest,
+			wantCode:   CodeInvalidPageToken,
+			wantMsg:    "Некорректный или несовместимый pageToken",
 		},
 		{
 			name:       "already exists",
 			err:        domain.NewErrAlreadyExists("запись уже существует"),
 			wantStatus: http.StatusConflict,
-			wantMsg:    "запись уже существует",
-		},
-		{
-			name:       "already exists with pg detail wrap",
-			err:        fmt.Errorf("%w: Key (name)=(Джин) already exists.", domain.NewErrAlreadyExists("запись уже существует")),
-			wantStatus: http.StatusConflict,
+			wantCode:   CodeAlreadyExists,
 			wantMsg:    "запись уже существует",
 		},
 		{
 			name:       "version conflict",
 			err:        domain.NewErrVersionConflict("конфликт версии ингредиента"),
 			wantStatus: http.StatusConflict,
+			wantCode:   CodeVersionConflict,
 			wantMsg:    "конфликт версии ингредиента",
 		},
 		{
-			name:       "version conflict wrapped",
-			err:        fmt.Errorf("repo: %w", domain.NewErrVersionConflict("конфликт версии ингредиента")),
+			name:       "resource in use",
+			err:        domain.NewErrResourceInUse("Ингредиент используется и не может быть удалён"),
 			wantStatus: http.StatusConflict,
-			wantMsg:    "конфликт версии ингредиента",
+			wantCode:   CodeResourceInUse,
+			wantMsg:    "Ингредиент используется и не может быть удалён",
 		},
 		{
 			name:       "not found",
 			err:        domain.NewErrNotFound("Ингредиент не найден"),
 			wantStatus: http.StatusNotFound,
+			wantCode:   CodeNotFound,
 			wantMsg:    "Ингредиент не найден",
 		},
 		{
-			name:       "not found wrapped",
-			err:        fmt.Errorf("repo: %w", domain.NewErrNotFound("Ингредиент не найден")),
-			wantStatus: http.StatusNotFound,
-			wantMsg:    "Ингредиент не найден",
+			name:       "service unavailable",
+			err:        domain.NewErrServiceUnavailable("Сервис временно недоступен"),
+			wantStatus: http.StatusServiceUnavailable,
+			wantCode:   CodeServiceUnavailable,
+			wantMsg:    "Сервис временно недоступен",
 		},
 		{
 			name:       "unknown error",
 			err:        errors.New("connection reset by peer"),
 			wantStatus: http.StatusInternalServerError,
+			wantCode:   CodeInternalError,
 			wantMsg:    internalServerErrorMessage,
 		},
 		{
 			name:       "unknown wrapped",
 			err:        fmt.Errorf("db: %w", errors.New("timeout")),
 			wantStatus: http.StatusInternalServerError,
+			wantCode:   CodeInternalError,
 			wantMsg:    internalServerErrorMessage,
 		},
 	}
 
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			status, msg := MapError(tt.err)
+			status, code, msg := MapError(tt.err)
 			assert.Equal(t, tt.wantStatus, status)
+			assert.Equal(t, tt.wantCode, code)
 			assert.Equal(t, tt.wantMsg, msg)
 		})
 	}

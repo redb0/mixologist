@@ -86,6 +86,7 @@ func sampleIngredient(id uint) *domain.Ingredient {
 		UnitMeasurement: domain.UnitMl,
 		ABV:             domain.Strong,
 		IngredientType:  domain.StrongPart,
+		Version:         1,
 	}
 }
 
@@ -257,7 +258,8 @@ func TestIngredientService_Update_SingleField(t *testing.T) {
 	service := NewIngredientService(repo)
 
 	ingredient, err := service.Update(context.Background(), 1, UpdateIngredientPatch{
-		Name: ptr("Джин London Dry"),
+		ExpectedVersion: 1,
+		Name:            ptr("Джин London Dry"),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "Джин London Dry", ingredient.Name)
@@ -277,6 +279,7 @@ func TestIngredientService_Update_MultipleFields(t *testing.T) {
 	service := NewIngredientService(repo)
 
 	ingredient, err := service.Update(context.Background(), 1, UpdateIngredientPatch{
+		ExpectedVersion: 1,
 		Name:            ptr("Ром"),
 		Description:     ptr("Белый ром"),
 		UnitMeasurement: ptr(domain.UnitGram),
@@ -294,7 +297,7 @@ func TestIngredientService_Update_MultipleFields(t *testing.T) {
 func TestIngredientService_Update_EmptyPatch(t *testing.T) {
 	service := NewIngredientService(&mockIngredientRepo{})
 
-	ingredient, err := service.Update(context.Background(), 1, UpdateIngredientPatch{})
+	ingredient, err := service.Update(context.Background(), 1, UpdateIngredientPatch{ExpectedVersion: 1})
 	assert.Nil(t, ingredient)
 	assert.True(t, errors.Is(err, domain.ErrInvalidIngredientData))
 	assert.Equal(t, "нет полей для обновления", err.Error())
@@ -309,7 +312,8 @@ func TestIngredientService_Update_InvalidEnum(t *testing.T) {
 	service := NewIngredientService(repo)
 
 	ingredient, err := service.Update(context.Background(), 1, UpdateIngredientPatch{
-		ABV: ptr(domain.ABVEnum("неверная")),
+		ExpectedVersion: 1,
+		ABV:             ptr(domain.ABVEnum("неверная")),
 	})
 	assert.Nil(t, ingredient)
 	assert.True(t, errors.Is(err, domain.ErrInvalidIngredientData))
@@ -324,7 +328,8 @@ func TestIngredientService_Update_NotFound(t *testing.T) {
 	service := NewIngredientService(repo)
 
 	ingredient, err := service.Update(context.Background(), 42, UpdateIngredientPatch{
-		Name: ptr("Ром"),
+		ExpectedVersion: 1,
+		Name:            ptr("Ром"),
 	})
 	assert.Nil(t, ingredient)
 	assert.True(t, errors.Is(err, domain.ErrNotFound))
@@ -342,7 +347,8 @@ func TestIngredientService_Update_DuplicateName(t *testing.T) {
 	service := NewIngredientService(repo)
 
 	ingredient, err := service.Update(context.Background(), 1, UpdateIngredientPatch{
-		Name: ptr("Ром"),
+		ExpectedVersion: 1,
+		Name:            ptr("Ром"),
 	})
 	assert.Nil(t, ingredient)
 	assert.True(t, errors.Is(err, domain.ErrAlreadyExists))

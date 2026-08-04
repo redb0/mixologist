@@ -13,6 +13,7 @@ import (
 const MaxIconSize = 512 * 1024 // 512 KB
 
 type UpdateIngredientPatch struct {
+	ExpectedVersion int
 	Name            *string
 	Description     *string
 	UnitMeasurement *domain.UnitMeasurementEnum
@@ -71,6 +72,9 @@ func (s *ingredientService) Create(
 }
 
 func (s *ingredientService) Update(ctx context.Context, id uint, patch UpdateIngredientPatch) (*domain.Ingredient, error) {
+	if patch.ExpectedVersion < 1 {
+		return nil, domain.NewErrInvalidIngredientData("version должен быть >= 1")
+	}
 	if patch.Name == nil &&
 		patch.Description == nil &&
 		patch.UnitMeasurement == nil &&
@@ -103,6 +107,8 @@ func (s *ingredientService) Update(ctx context.Context, id uint, patch UpdateIng
 	if err := s.validateIngredient(ingredient); err != nil {
 		return nil, fmt.Errorf("%w: %v", domain.NewErrInvalidIngredientData("неверные данные ингредиента"), err)
 	}
+
+	ingredient.Version = patch.ExpectedVersion
 
 	if err := s.repo.Update(ctx, ingredient); err != nil {
 		return nil, err

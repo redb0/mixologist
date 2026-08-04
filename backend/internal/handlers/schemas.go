@@ -15,6 +15,7 @@ type CreateIngredientRequest struct {
 }
 
 type UpdateIngredientRequest struct {
+	Version         int                         `json:"version" binding:"required,min=1"`
 	Name            *string                     `json:"name" binding:"omitempty,min=3,max=512"`
 	Description     *string                     `json:"description" binding:"omitempty,max=1024"`
 	UnitMeasurement *domain.UnitMeasurementEnum `json:"unit_measurement"`

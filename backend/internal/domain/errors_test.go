@@ -8,41 +8,130 @@ import (
 	"github.com/redb0/mixologist/internal/domain"
 )
 
-func TestNewErrNotFound_IsUnwrapped(t *testing.T) {
-	err := domain.NewErrNotFound("missing")
-	if !errors.Is(err, domain.ErrNotFound) {
-		t.Fatal("errors.Is(..., ErrNotFound) должна быть истинной для ошибки без обёртки")
-	}
-}
+func TestDomainErrors_IsAsAndMessage(t *testing.T) {
+	const msg = "детальное сообщение"
 
-func TestNewErrNotFound_IsWrappedFmt(t *testing.T) {
-	err := fmt.Errorf("context: %w", domain.NewErrNotFound("missing"))
-	if !errors.Is(err, domain.ErrNotFound) {
-		t.Fatal("errors.Is должна находить ErrNotFound в цепочке fmt.Errorf %%w")
+	tests := []struct {
+		name     string
+		newErr   func(string) error
+		sentinel error
+		checkAs  func(t *testing.T, err error, wantMsg string)
+	}{
+		{
+			name:     "NotFound",
+			newErr:   domain.NewErrNotFound,
+			sentinel: domain.ErrNotFound,
+			checkAs: func(t *testing.T, err error, wantMsg string) {
+				t.Helper()
+				var target *domain.NotFoundError
+				if !errors.As(err, &target) || target.Message != wantMsg {
+					t.Fatalf("errors.As → NotFoundError: got %+v, want Message=%q", target, wantMsg)
+				}
+			},
+		},
+		{
+			name:     "AlreadyExists",
+			newErr:   domain.NewErrAlreadyExists,
+			sentinel: domain.ErrAlreadyExists,
+			checkAs: func(t *testing.T, err error, wantMsg string) {
+				t.Helper()
+				var target *domain.AlreadyExistsError
+				if !errors.As(err, &target) || target.Message != wantMsg {
+					t.Fatalf("errors.As → AlreadyExistsError: got %+v, want Message=%q", target, wantMsg)
+				}
+			},
+		},
+		{
+			name:     "VersionConflict",
+			newErr:   domain.NewErrVersionConflict,
+			sentinel: domain.ErrVersionConflict,
+			checkAs: func(t *testing.T, err error, wantMsg string) {
+				t.Helper()
+				var target *domain.VersionConflictError
+				if !errors.As(err, &target) || target.Message != wantMsg {
+					t.Fatalf("errors.As → VersionConflictError: got %+v, want Message=%q", target, wantMsg)
+				}
+			},
+		},
+		{
+			name:     "InvalidIngredientData",
+			newErr:   domain.NewErrInvalidIngredientData,
+			sentinel: domain.ErrInvalidIngredientData,
+			checkAs: func(t *testing.T, err error, wantMsg string) {
+				t.Helper()
+				var target *domain.InvalidIngredientDataError
+				if !errors.As(err, &target) || target.Message != wantMsg {
+					t.Fatalf("errors.As → InvalidIngredientDataError: got %+v, want Message=%q", target, wantMsg)
+				}
+			},
+		},
+		{
+			name:     "InvalidPageToken",
+			newErr:   domain.NewErrInvalidPageToken,
+			sentinel: domain.ErrInvalidPageToken,
+			checkAs: func(t *testing.T, err error, wantMsg string) {
+				t.Helper()
+				var target *domain.InvalidPageTokenError
+				if !errors.As(err, &target) || target.Message != wantMsg {
+					t.Fatalf("errors.As → InvalidPageTokenError: got %+v, want Message=%q", target, wantMsg)
+				}
+			},
+		},
+		{
+			name:     "InvalidID",
+			newErr:   domain.NewErrInvalidID,
+			sentinel: domain.ErrInvalidID,
+			checkAs: func(t *testing.T, err error, wantMsg string) {
+				t.Helper()
+				var target *domain.InvalidIDError
+				if !errors.As(err, &target) || target.Message != wantMsg {
+					t.Fatalf("errors.As → InvalidIDError: got %+v, want Message=%q", target, wantMsg)
+				}
+			},
+		},
+		{
+			name:     "ResourceInUse",
+			newErr:   domain.NewErrResourceInUse,
+			sentinel: domain.ErrResourceInUse,
+			checkAs: func(t *testing.T, err error, wantMsg string) {
+				t.Helper()
+				var target *domain.ResourceInUseError
+				if !errors.As(err, &target) || target.Message != wantMsg {
+					t.Fatalf("errors.As → ResourceInUseError: got %+v, want Message=%q", target, wantMsg)
+				}
+			},
+		},
+		{
+			name:     "ServiceUnavailable",
+			newErr:   domain.NewErrServiceUnavailable,
+			sentinel: domain.ErrServiceUnavailable,
+			checkAs: func(t *testing.T, err error, wantMsg string) {
+				t.Helper()
+				var target *domain.ServiceUnavailableError
+				if !errors.As(err, &target) || target.Message != wantMsg {
+					t.Fatalf("errors.As → ServiceUnavailableError: got %+v, want Message=%q", target, wantMsg)
+				}
+			},
+		},
 	}
-}
 
-func TestNewErrNotFound_AsMessage(t *testing.T) {
-	inner := domain.NewErrNotFound("нет такого ресурса")
-	wrapped := fmt.Errorf("слой выше: %w", inner)
-	var nf *domain.NotFoundError
-	if !errors.As(wrapped, &nf) || nf.Message != "нет такого ресурса" {
-		t.Fatalf("ожидали извлечь NotFoundError с Message через errors.As; got %+v", nf)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.newErr(msg)
 
-func TestNewErrVersionConflict_IsUnwrapped(t *testing.T) {
-	err := domain.NewErrVersionConflict("stale version")
-	if !errors.Is(err, domain.ErrVersionConflict) {
-		t.Fatal("errors.Is(..., ErrVersionConflict) должна быть истинной для ошибки без обёртки")
-	}
-}
+			if err.Error() != msg {
+				t.Fatalf("Error(): got %q, want %q", err.Error(), msg)
+			}
+			if !errors.Is(err, tt.sentinel) {
+				t.Fatalf("errors.Is(err, %v) = false", tt.sentinel)
+			}
 
-func TestNewErrVersionConflict_AsMessage(t *testing.T) {
-	inner := domain.NewErrVersionConflict("конфликт версии ингредиента")
-	wrapped := fmt.Errorf("слой выше: %w", inner)
-	var conflict *domain.VersionConflictError
-	if !errors.As(wrapped, &conflict) || conflict.Message != "конфликт версии ингредиента" {
-		t.Fatalf("ожидали извлечь VersionConflictError с Message через errors.As; got %+v", conflict)
+			wrapped := fmt.Errorf("слой выше: %w", err)
+			if !errors.Is(wrapped, tt.sentinel) {
+				t.Fatalf("errors.Is(wrapped, %v) = false", tt.sentinel)
+			}
+
+			tt.checkAs(t, wrapped, msg)
+		})
 	}
 }

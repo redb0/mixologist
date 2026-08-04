@@ -1,0 +1,3 @@
+ignore:
+  - "backend/cmd/api/main.go"
+  - "backend/internal/router/router.go"

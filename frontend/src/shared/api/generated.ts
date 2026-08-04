@@ -4,667 +4,645 @@
  */
 
 export interface paths {
-  "/health": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Состояние backend и БД */
+        get: operations["getHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Состояние backend и БД */
-    get: operations["getHealth"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v1/ingredients": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/ingredients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Список ингредиентов
+         * @description Token-based (keyset) пагинация. Публичные имена параметров — `pageToken`/`pageSize`.
+         *
+         *     Default sort: `created_at DESC` (с внутренним tie-breaker `id DESC`).
+         *     В одном запросе допускается только одно поле сортировки.
+         *     `totalSize` — точное число записей после фильтров, до ограничения текущей страницы.
+         *     Пустая строка `nextPageToken` означает отсутствие следующей страницы.
+         *
+         *     Права (этап 1): `user` или `admin`.
+         */
+        get: operations["listIngredients"];
+        put?: never;
+        /**
+         * Создать ингредиент
+         * @description Права (этап 1): только `admin`.
+         */
+        post: operations["createIngredient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Список ингредиентов
-     * @description Token-based (keyset) пагинация. Публичные имена параметров — `pageToken`/`pageSize`.
-     *
-     *     Default sort: `created_at DESC` (с внутренним tie-breaker `id DESC`).
-     *     В одном запросе допускается только одно поле сортировки.
-     *     `totalSize` — точное число записей после фильтров, до ограничения текущей страницы.
-     *     Пустая строка `nextPageToken` означает отсутствие следующей страницы.
-     *
-     *     Права (этап 1): `user` или `admin`.
-     */
-    get: operations["listIngredients"];
-    put?: never;
-    /**
-     * Создать ингредиент
-     * @description Права (этап 1): только `admin`.
-     */
-    post: operations["createIngredient"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v1/ingredients/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description Идентификатор ингредиента (положительное целое) */
-        id: components["parameters"]["IngredientID"];
-      };
-      cookie?: never;
+    "/api/v1/ingredients/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Идентификатор ингредиента (положительное целое) */
+                id: components["parameters"]["IngredientID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Получить ингредиент по ID
+         * @description Права (этап 1): `user` или `admin`.
+         */
+        get: operations["getIngredient"];
+        put?: never;
+        post?: never;
+        /**
+         * Удалить ингредиент
+         * @description При использовании ингредиента в рецептах возвращается `409 RESOURCE_IN_USE`
+         *     (реальные FK появятся вместе с recipes).
+         *
+         *     Права (этап 1): только `admin`.
+         */
+        delete: operations["deleteIngredient"];
+        options?: never;
+        head?: never;
+        /**
+         * Частично обновить ингредиент
+         * @description Optimistic locking: поле `version` обязательно и должно совпадать с текущей версией.
+         *     Необходимо передать хотя бы одно изменяемое поле помимо `version`.
+         *     Пустой body `{}` или только `{"version": N}` — `VALIDATION_ERROR`.
+         *
+         *     Права (этап 1): только `admin`.
+         */
+        patch: operations["updateIngredient"];
+        trace?: never;
     };
-    /**
-     * Получить ингредиент по ID
-     * @description Права (этап 1): `user` или `admin`.
-     */
-    get: operations["getIngredient"];
-    put?: never;
-    post?: never;
-    /**
-     * Удалить ингредиент
-     * @description При использовании ингредиента в рецептах возвращается `409 RESOURCE_IN_USE`
-     *     (реальные FK появятся вместе с recipes).
-     *
-     *     Права (этап 1): только `admin`.
-     */
-    delete: operations["deleteIngredient"];
-    options?: never;
-    head?: never;
-    /**
-     * Частично обновить ингредиент
-     * @description Optimistic locking: поле `version` обязательно и должно совпадать с текущей версией.
-     *     Необходимо передать хотя бы одно изменяемое поле помимо `version`.
-     *     Пустой body `{}` или только `{"version": N}` — `VALIDATION_ERROR`.
-     *
-     *     Права (этап 1): только `admin`.
-     */
-    patch: operations["updateIngredient"];
-    trace?: never;
-  };
-  "/api/v1/ingredients/{id}/icon": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description Идентификатор ингредиента (положительное целое) */
-        id: components["parameters"]["IngredientID"];
-      };
-      cookie?: never;
+    "/api/v1/ingredients/{id}/icon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Идентификатор ингредиента (положительное целое) */
+                id: components["parameters"]["IngredientID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Получить иконку ингредиента
+         * @description Права (этап 1): `user` или `admin`.
+         */
+        get: operations["getIngredientIcon"];
+        /**
+         * Загрузить иконку ингредиента
+         * @description Сырое тело файла (PNG или JPEG), максимум 512 KB.
+         *     Права (этап 1): только `admin`.
+         */
+        put: operations["putIngredientIcon"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Получить иконку ингредиента
-     * @description Права (этап 1): `user` или `admin`.
-     */
-    get: operations["getIngredientIcon"];
-    /**
-     * Загрузить иконку ингредиента
-     * @description Сырое тело файла (PNG или JPEG), максимум 512 KB.
-     *     Права (этап 1): только `admin`.
-     */
-    put: operations["putIngredientIcon"];
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-  schemas: {
-    HealthResponse: {
-      /** @enum {string} */
-      status: "ok" | "unavailable";
-    };
-    /** @enum {string} */
-    UnitMeasurement: "мл" | "гр" | "шт" | "дэш";
-    /** @enum {string} */
-    Abv: "безалкогольный" | "слабоалкогольный" | "крепкий";
-    /** @enum {string} */
-    IngredientType:
-      | "крепкая часть"
-      | "безалкогольная часть"
-      | "вермут"
-      | "вино"
-      | "ликер"
-      | "биттер"
-      | "сироп"
-      | "другое"
-      | "фрукт"
-      | "овощ"
-      | "ягода";
-    /** @enum {string} */
-    IngredientSortField: "created_at" | "name";
-    /** @enum {string} */
-    SortOrder: "asc" | "desc";
-    /**
-     * @description Стабильный машинный код ошибки (uppercase)
-     * @enum {string}
-     */
-    ErrorCode:
-      | "VALIDATION_ERROR"
-      | "INVALID_ID"
-      | "INVALID_PAGE_TOKEN"
-      | "NOT_FOUND"
-      | "ALREADY_EXISTS"
-      | "VERSION_CONFLICT"
-      | "RESOURCE_IN_USE"
-      | "UNAUTHORIZED"
-      | "FORBIDDEN"
-      | "INTERNAL_ERROR"
-      | "SERVICE_UNAVAILABLE";
-    ErrorDetail: {
-      /** @description Имя поля (JSON path или query param) */
-      field: string;
-      /** @description Безопасное русское сообщение по полю */
-      message: string;
-    };
-    ErrorBody: {
-      code: components["schemas"]["ErrorCode"];
-      /** @description Безопасное русское сообщение для клиента */
-      message: string;
-      /** @description Тот же ID, что в заголовке `X-Request-ID` */
-      request_id: string;
-      /** @description Опциональные field-level ошибки */
-      details?: components["schemas"]["ErrorDetail"][];
-    };
-    ErrorResponse: {
-      error: components["schemas"]["ErrorBody"];
-    };
-    Ingredient: {
-      id: number;
-      name: string;
-      description: string;
-      unit_measurement: components["schemas"]["UnitMeasurement"];
-      abv: components["schemas"]["Abv"];
-      ingredient_type: components["schemas"]["IngredientType"];
-      /** @description true, если у ингредиента загружена иконка */
-      has_icon: boolean;
-      /** @description Версия для optimistic locking */
-      version: number;
-      /** Format: date-time */
-      created_at: string;
-      /** Format: date-time */
-      updated_at: string;
-    };
-    IngredientListResponse: {
-      ingredients: components["schemas"]["Ingredient"][];
-      /** @description Opaque token следующей страницы. Пустая строка на последней странице. */
-      nextPageToken: string;
-      /** @description Точное количество записей после фильтров, независимо от pageSize/pageToken. */
-      totalSize: number;
-    };
-    CreateIngredientRequest: {
-      name: string;
-      /** @default  */
-      description: string;
-      unit_measurement: components["schemas"]["UnitMeasurement"];
-      abv: components["schemas"]["Abv"];
-      ingredient_type: components["schemas"]["IngredientType"];
-    };
-    /**
-     * @description `version` обязателен. Кроме него нужно хотя бы одно изменяемое поле
-     *     (`name`, `description`, `unit_measurement`, `abv`, `ingredient_type`).
-     */
-    UpdateIngredientRequest: {
-      /** @description Ожидаемая текущая версия записи */
-      version: number;
-      name?: string;
-      description?: string;
-      unit_measurement?: components["schemas"]["UnitMeasurement"];
-      abv?: components["schemas"]["Abv"];
-      ingredient_type?: components["schemas"]["IngredientType"];
-    };
-  };
-  responses: {
-    /**
-     * @description Ошибка валидации запроса. Типичные коды:
-     *     `VALIDATION_ERROR`, `INVALID_ID`, `INVALID_PAGE_TOKEN`.
-     */
-    BadRequest: {
-      headers: {
-        "X-Request-ID": components["headers"]["XRequestID"];
-        [name: string]: unknown;
-      };
-      content: {
-        "application/json": components["schemas"]["ErrorResponse"];
-      };
-    };
-    /** @description Требуется аутентификация (`UNAUTHORIZED`). Enforcement с этапа 1. */
-    Unauthorized: {
-      headers: {
-        "X-Request-ID": components["headers"]["XRequestID"];
-        [name: string]: unknown;
-      };
-      content: {
+    schemas: {
+        HealthResponse: {
+            /** @enum {string} */
+            status: "ok" | "unavailable";
+        };
+        /** @enum {string} */
+        UnitMeasurement: "мл" | "гр" | "шт" | "дэш";
+        /** @enum {string} */
+        Abv: "безалкогольный" | "слабоалкогольный" | "крепкий";
+        /** @enum {string} */
+        IngredientType: "крепкая часть" | "безалкогольная часть" | "вермут" | "вино" | "ликер" | "биттер" | "сироп" | "другое" | "фрукт" | "овощ" | "ягода";
+        /** @enum {string} */
+        IngredientSortField: "created_at" | "name";
+        /** @enum {string} */
+        SortOrder: "asc" | "desc";
         /**
-         * @example {
-         *       "error": {
-         *         "code": "UNAUTHORIZED",
-         *         "message": "Требуется аутентификация",
-         *         "request_id": "550e8400-e29b-41d4-a716-446655440000"
-         *       }
-         *     }
+         * @description Стабильный машинный код ошибки (uppercase)
+         * @enum {string}
          */
-        "application/json": components["schemas"]["ErrorResponse"];
-      };
-    };
-    /** @description Недостаточно прав (`FORBIDDEN`). Enforcement с этапа 1. */
-    Forbidden: {
-      headers: {
-        "X-Request-ID": components["headers"]["XRequestID"];
-        [name: string]: unknown;
-      };
-      content: {
+        ErrorCode: "VALIDATION_ERROR" | "INVALID_ID" | "INVALID_PAGE_TOKEN" | "NOT_FOUND" | "ALREADY_EXISTS" | "VERSION_CONFLICT" | "RESOURCE_IN_USE" | "UNAUTHORIZED" | "FORBIDDEN" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE";
+        ErrorDetail: {
+            /** @description Имя поля (JSON path или query param) */
+            field: string;
+            /** @description Безопасное русское сообщение по полю */
+            message: string;
+        };
+        ErrorBody: {
+            code: components["schemas"]["ErrorCode"];
+            /** @description Безопасное русское сообщение для клиента */
+            message: string;
+            /** @description Тот же ID, что в заголовке `X-Request-ID` */
+            request_id: string;
+            /** @description Опциональные field-level ошибки */
+            details?: components["schemas"]["ErrorDetail"][];
+        };
+        ErrorResponse: {
+            error: components["schemas"]["ErrorBody"];
+        };
+        Ingredient: {
+            id: number;
+            name: string;
+            description: string;
+            unit_measurement: components["schemas"]["UnitMeasurement"];
+            abv: components["schemas"]["Abv"];
+            ingredient_type: components["schemas"]["IngredientType"];
+            /** @description true, если у ингредиента загружена иконка */
+            has_icon: boolean;
+            /** @description Версия для optimistic locking */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        IngredientListResponse: {
+            ingredients: components["schemas"]["Ingredient"][];
+            /** @description Opaque token следующей страницы. Пустая строка на последней странице. */
+            nextPageToken: string;
+            /** @description Точное количество записей после фильтров, независимо от pageSize/pageToken. */
+            totalSize: number;
+        };
+        CreateIngredientRequest: {
+            name: string;
+            /** @default  */
+            description: string;
+            unit_measurement: components["schemas"]["UnitMeasurement"];
+            abv: components["schemas"]["Abv"];
+            ingredient_type: components["schemas"]["IngredientType"];
+        };
         /**
-         * @example {
-         *       "error": {
-         *         "code": "FORBIDDEN",
-         *         "message": "Недостаточно прав",
-         *         "request_id": "550e8400-e29b-41d4-a716-446655440000"
-         *       }
-         *     }
+         * @description `version` обязателен. Кроме него нужно хотя бы одно изменяемое поле
+         *     (`name`, `description`, `unit_measurement`, `abv`, `ingredient_type`).
          */
-        "application/json": components["schemas"]["ErrorResponse"];
-      };
+        UpdateIngredientRequest: {
+            /** @description Ожидаемая текущая версия записи */
+            version: number;
+            name?: string;
+            description?: string;
+            unit_measurement?: components["schemas"]["UnitMeasurement"];
+            abv?: components["schemas"]["Abv"];
+            ingredient_type?: components["schemas"]["IngredientType"];
+        };
     };
-    /** @description Ресурс не найден (`NOT_FOUND`) */
-    NotFound: {
-      headers: {
-        "X-Request-ID": components["headers"]["XRequestID"];
-        [name: string]: unknown;
-      };
-      content: {
-        /**
-         * @example {
-         *       "error": {
-         *         "code": "NOT_FOUND",
-         *         "message": "Ингредиент не найден",
-         *         "request_id": "550e8400-e29b-41d4-a716-446655440000"
-         *       }
-         *     }
-         */
-        "application/json": components["schemas"]["ErrorResponse"];
-      };
-    };
-    /**
-     * @description Конфликт состояния. Типичные коды:
-     *     `ALREADY_EXISTS`, `VERSION_CONFLICT`, `RESOURCE_IN_USE`.
-     */
-    Conflict: {
-      headers: {
-        "X-Request-ID": components["headers"]["XRequestID"];
-        [name: string]: unknown;
-      };
-      content: {
-        "application/json": components["schemas"]["ErrorResponse"];
-      };
-    };
-    /** @description Внутренняя ошибка (`INTERNAL_ERROR`). Детали БД/stack наружу не отдаются. */
-    InternalError: {
-      headers: {
-        "X-Request-ID": components["headers"]["XRequestID"];
-        [name: string]: unknown;
-      };
-      content: {
-        /**
-         * @example {
-         *       "error": {
-         *         "code": "INTERNAL_ERROR",
-         *         "message": "Внутренняя ошибка сервера",
-         *         "request_id": "550e8400-e29b-41d4-a716-446655440000"
-         *       }
-         *     }
-         */
-        "application/json": components["schemas"]["ErrorResponse"];
-      };
-    };
-    /** @description Сервис временно недоступен (`SERVICE_UNAVAILABLE`) */
-    ServiceUnavailable: {
-      headers: {
-        "X-Request-ID": components["headers"]["XRequestID"];
-        [name: string]: unknown;
-      };
-      content: {
-        /**
-         * @example {
-         *       "error": {
-         *         "code": "SERVICE_UNAVAILABLE",
-         *         "message": "Сервис временно недоступен",
-         *         "request_id": "550e8400-e29b-41d4-a716-446655440000"
-         *       }
-         *     }
-         */
-        "application/json": components["schemas"]["ErrorResponse"];
-      };
-    };
-  };
-  parameters: {
-    /** @description Идентификатор ингредиента (положительное целое) */
-    IngredientID: number;
-    /** @description Размер страницы (1–100). Default — 25. */
-    PageSize: number;
-    /**
-     * @description Opaque base64url token следующей страницы.
-     *     Отвергается (`INVALID_PAGE_TOKEN`), если формат некорректен или
-     *     sort/order/pageSize не совпадают с параметрами текущего запроса.
-     */
-    PageToken: string;
-    /** @description Поле сортировки. Допускается только одно значение. */
-    IngredientSort: components["schemas"]["IngredientSortField"];
-    /**
-     * @description Направление сортировки. Для запроса без параметров используется `desc`
-     *     (то есть `created_at DESC`).
-     */
-    SortOrder: components["schemas"]["SortOrder"];
-    /** @description Регистронезависимый поиск по подстроке (`ILIKE`) */
-    IngredientNameFilter: string;
-    /** @description Точное совпадение enum */
-    IngredientTypeFilter: components["schemas"]["IngredientType"];
-    /** @description Точное совпадение enum */
-    AbvFilter: components["schemas"]["Abv"];
-  };
-  requestBodies: never;
-  headers: {
-    /**
-     * @description Корреляционный ID запроса. Принимается из входящего `X-Request-ID`
-     *     (если валиден) либо генерируется сервером. Тот же ID в `error.request_id`.
-     */
-    XRequestID: string;
-  };
-  pathItems: never;
-}
-export type $defs = Record<string, never>;
-export interface operations {
-  getHealth: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
     responses: {
-      /** @description Backend и БД доступны */
-      200: {
-        headers: {
-          "X-Request-ID": components["headers"]["XRequestID"];
-          [name: string]: unknown;
+        /**
+         * @description Ошибка валидации запроса. Типичные коды:
+         *     `VALIDATION_ERROR`, `INVALID_ID`, `INVALID_PAGE_TOKEN`.
+         */
+        BadRequest: {
+            headers: {
+                "X-Request-ID": components["headers"]["XRequestID"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
         };
-        content: {
-          /**
-           * @example {
-           *       "status": "ok"
-           *     }
-           */
-          "application/json": components["schemas"]["HealthResponse"];
+        /** @description Требуется аутентификация (`UNAUTHORIZED`). Enforcement с этапа 1. */
+        Unauthorized: {
+            headers: {
+                "X-Request-ID": components["headers"]["XRequestID"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "UNAUTHORIZED",
+                 *         "message": "Требуется аутентификация",
+                 *         "request_id": "550e8400-e29b-41d4-a716-446655440000"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
         };
-      };
-      /** @description Backend или БД недоступны */
-      503: {
-        headers: {
-          "X-Request-ID": components["headers"]["XRequestID"];
-          [name: string]: unknown;
+        /** @description Недостаточно прав (`FORBIDDEN`). Enforcement с этапа 1. */
+        Forbidden: {
+            headers: {
+                "X-Request-ID": components["headers"]["XRequestID"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "FORBIDDEN",
+                 *         "message": "Недостаточно прав",
+                 *         "request_id": "550e8400-e29b-41d4-a716-446655440000"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
         };
-        content: {
-          /**
-           * @example {
-           *       "status": "unavailable"
-           *     }
-           */
-          "application/json": components["schemas"]["HealthResponse"];
+        /** @description Ресурс не найден (`NOT_FOUND`) */
+        NotFound: {
+            headers: {
+                "X-Request-ID": components["headers"]["XRequestID"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "NOT_FOUND",
+                 *         "message": "Ингредиент не найден",
+                 *         "request_id": "550e8400-e29b-41d4-a716-446655440000"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
         };
-      };
+        /**
+         * @description Конфликт состояния. Типичные коды:
+         *     `ALREADY_EXISTS`, `VERSION_CONFLICT`, `RESOURCE_IN_USE`.
+         */
+        Conflict: {
+            headers: {
+                "X-Request-ID": components["headers"]["XRequestID"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Внутренняя ошибка (`INTERNAL_ERROR`). Детали БД/stack наружу не отдаются. */
+        InternalError: {
+            headers: {
+                "X-Request-ID": components["headers"]["XRequestID"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "INTERNAL_ERROR",
+                 *         "message": "Внутренняя ошибка сервера",
+                 *         "request_id": "550e8400-e29b-41d4-a716-446655440000"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Сервис временно недоступен (`SERVICE_UNAVAILABLE`) */
+        ServiceUnavailable: {
+            headers: {
+                "X-Request-ID": components["headers"]["XRequestID"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "SERVICE_UNAVAILABLE",
+                 *         "message": "Сервис временно недоступен",
+                 *         "request_id": "550e8400-e29b-41d4-a716-446655440000"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
     };
-  };
-  listIngredients: {
     parameters: {
-      query?: {
+        /** @description Идентификатор ингредиента (положительное целое) */
+        IngredientID: number;
         /** @description Размер страницы (1–100). Default — 25. */
-        pageSize?: components["parameters"]["PageSize"];
+        PageSize: number;
         /**
          * @description Opaque base64url token следующей страницы.
          *     Отвергается (`INVALID_PAGE_TOKEN`), если формат некорректен или
          *     sort/order/pageSize не совпадают с параметрами текущего запроса.
          */
-        pageToken?: components["parameters"]["PageToken"];
+        PageToken: string;
         /** @description Поле сортировки. Допускается только одно значение. */
-        sort?: components["parameters"]["IngredientSort"];
+        IngredientSort: components["schemas"]["IngredientSortField"];
         /**
          * @description Направление сортировки. Для запроса без параметров используется `desc`
          *     (то есть `created_at DESC`).
          */
-        order?: components["parameters"]["SortOrder"];
+        SortOrder: components["schemas"]["SortOrder"];
         /** @description Регистронезависимый поиск по подстроке (`ILIKE`) */
-        name?: components["parameters"]["IngredientNameFilter"];
+        IngredientNameFilter: string;
         /** @description Точное совпадение enum */
-        ingredient_type?: components["parameters"]["IngredientTypeFilter"];
+        IngredientTypeFilter: components["schemas"]["IngredientType"];
         /** @description Точное совпадение enum */
-        abv?: components["parameters"]["AbvFilter"];
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
+        AbvFilter: components["schemas"]["Abv"];
     };
-    requestBody?: never;
-    responses: {
-      /** @description Страница ингредиентов */
-      200: {
-        headers: {
-          "X-Request-ID": components["headers"]["XRequestID"];
-          [name: string]: unknown;
+    requestBodies: never;
+    headers: {
+        /**
+         * @description Корреляционный ID запроса. Принимается из входящего `X-Request-ID`
+         *     (если валиден) либо генерируется сервером. Тот же ID в `error.request_id`.
+         */
+        XRequestID: string;
+    };
+    pathItems: never;
+}
+export type $defs = Record<string, never>;
+export interface operations {
+    getHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["IngredientListResponse"];
+        requestBody?: never;
+        responses: {
+            /** @description Backend и БД доступны */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "status": "ok"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+            /** @description Backend или БД недоступны */
+            503: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "status": "unavailable"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
         };
-      };
-      400: components["responses"]["BadRequest"];
-      401: components["responses"]["Unauthorized"];
-      403: components["responses"]["Forbidden"];
-      500: components["responses"]["InternalError"];
-      503: components["responses"]["ServiceUnavailable"];
     };
-  };
-  createIngredient: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateIngredientRequest"];
-      };
-    };
-    responses: {
-      /** @description Ингредиент создан */
-      201: {
-        headers: {
-          "X-Request-ID": components["headers"]["XRequestID"];
-          [name: string]: unknown;
+    listIngredients: {
+        parameters: {
+            query?: {
+                /** @description Размер страницы (1–100). Default — 25. */
+                pageSize?: components["parameters"]["PageSize"];
+                /**
+                 * @description Opaque base64url token следующей страницы.
+                 *     Отвергается (`INVALID_PAGE_TOKEN`), если формат некорректен или
+                 *     sort/order/pageSize не совпадают с параметрами текущего запроса.
+                 */
+                pageToken?: components["parameters"]["PageToken"];
+                /** @description Поле сортировки. Допускается только одно значение. */
+                sort?: components["parameters"]["IngredientSort"];
+                /**
+                 * @description Направление сортировки. Для запроса без параметров используется `desc`
+                 *     (то есть `created_at DESC`).
+                 */
+                order?: components["parameters"]["SortOrder"];
+                /** @description Регистронезависимый поиск по подстроке (`ILIKE`) */
+                name?: components["parameters"]["IngredientNameFilter"];
+                /** @description Точное совпадение enum */
+                ingredient_type?: components["parameters"]["IngredientTypeFilter"];
+                /** @description Точное совпадение enum */
+                abv?: components["parameters"]["AbvFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["Ingredient"];
+        requestBody?: never;
+        responses: {
+            /** @description Страница ингредиентов */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngredientListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
         };
-      };
-      400: components["responses"]["BadRequest"];
-      401: components["responses"]["Unauthorized"];
-      403: components["responses"]["Forbidden"];
-      409: components["responses"]["Conflict"];
-      500: components["responses"]["InternalError"];
-      503: components["responses"]["ServiceUnavailable"];
     };
-  };
-  getIngredient: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description Идентификатор ингредиента (положительное целое) */
-        id: components["parameters"]["IngredientID"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Ингредиент найден */
-      200: {
-        headers: {
-          "X-Request-ID": components["headers"]["XRequestID"];
-          [name: string]: unknown;
+    createIngredient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["Ingredient"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateIngredientRequest"];
+            };
         };
-      };
-      400: components["responses"]["BadRequest"];
-      401: components["responses"]["Unauthorized"];
-      403: components["responses"]["Forbidden"];
-      404: components["responses"]["NotFound"];
-      500: components["responses"]["InternalError"];
-      503: components["responses"]["ServiceUnavailable"];
-    };
-  };
-  deleteIngredient: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description Идентификатор ингредиента (положительное целое) */
-        id: components["parameters"]["IngredientID"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Ингредиент удалён */
-      204: {
-        headers: {
-          "X-Request-ID": components["headers"]["XRequestID"];
-          [name: string]: unknown;
+        responses: {
+            /** @description Ингредиент создан */
+            201: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ingredient"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
         };
-        content?: never;
-      };
-      400: components["responses"]["BadRequest"];
-      401: components["responses"]["Unauthorized"];
-      403: components["responses"]["Forbidden"];
-      404: components["responses"]["NotFound"];
-      409: components["responses"]["Conflict"];
-      500: components["responses"]["InternalError"];
-      503: components["responses"]["ServiceUnavailable"];
     };
-  };
-  updateIngredient: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description Идентификатор ингредиента (положительное целое) */
-        id: components["parameters"]["IngredientID"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["UpdateIngredientRequest"];
-      };
-    };
-    responses: {
-      /** @description Ингредиент обновлён */
-      200: {
-        headers: {
-          "X-Request-ID": components["headers"]["XRequestID"];
-          [name: string]: unknown;
+    getIngredient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Идентификатор ингредиента (положительное целое) */
+                id: components["parameters"]["IngredientID"];
+            };
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["Ingredient"];
+        requestBody?: never;
+        responses: {
+            /** @description Ингредиент найден */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ingredient"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
         };
-      };
-      400: components["responses"]["BadRequest"];
-      401: components["responses"]["Unauthorized"];
-      403: components["responses"]["Forbidden"];
-      404: components["responses"]["NotFound"];
-      409: components["responses"]["Conflict"];
-      500: components["responses"]["InternalError"];
-      503: components["responses"]["ServiceUnavailable"];
     };
-  };
-  getIngredientIcon: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description Идентификатор ингредиента (положительное целое) */
-        id: components["parameters"]["IngredientID"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Бинарная иконка (PNG или JPEG) */
-      200: {
-        headers: {
-          "X-Request-ID": components["headers"]["XRequestID"];
-          /** @description Размер тела ответа в байтах */
-          "Content-Length"?: number;
-          /** @description Кеширование иконки */
-          "Cache-Control"?: string;
-          [name: string]: unknown;
+    deleteIngredient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Идентификатор ингредиента (положительное целое) */
+                id: components["parameters"]["IngredientID"];
+            };
+            cookie?: never;
         };
-        content: {
-          "image/png": string;
-          "image/jpeg": string;
+        requestBody?: never;
+        responses: {
+            /** @description Ингредиент удалён */
+            204: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
         };
-      };
-      400: components["responses"]["BadRequest"];
-      401: components["responses"]["Unauthorized"];
-      403: components["responses"]["Forbidden"];
-      404: components["responses"]["NotFound"];
-      500: components["responses"]["InternalError"];
-      503: components["responses"]["ServiceUnavailable"];
     };
-  };
-  putIngredientIcon: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description Идентификатор ингредиента (положительное целое) */
-        id: components["parameters"]["IngredientID"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/octet-stream": string;
-      };
-    };
-    responses: {
-      /** @description Иконка сохранена */
-      204: {
-        headers: {
-          "X-Request-ID": components["headers"]["XRequestID"];
-          [name: string]: unknown;
+    updateIngredient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Идентификатор ингредиента (положительное целое) */
+                id: components["parameters"]["IngredientID"];
+            };
+            cookie?: never;
         };
-        content?: never;
-      };
-      400: components["responses"]["BadRequest"];
-      401: components["responses"]["Unauthorized"];
-      403: components["responses"]["Forbidden"];
-      404: components["responses"]["NotFound"];
-      500: components["responses"]["InternalError"];
-      503: components["responses"]["ServiceUnavailable"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateIngredientRequest"];
+            };
+        };
+        responses: {
+            /** @description Ингредиент обновлён */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ingredient"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
     };
-  };
+    getIngredientIcon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Идентификатор ингредиента (положительное целое) */
+                id: components["parameters"]["IngredientID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Бинарная иконка (PNG или JPEG) */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    /** @description Размер тела ответа в байтах */
+                    "Content-Length"?: number;
+                    /** @description Кеширование иконки */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/jpeg": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    putIngredientIcon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Идентификатор ингредиента (положительное целое) */
+                id: components["parameters"]["IngredientID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Иконка сохранена */
+            204: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
 }

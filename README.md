@@ -65,6 +65,11 @@ cp .env.example .env
 
 В `.env` задаётся `DB_URL` — строка подключения для миграций (используется `make`).
 
+Для auth (Google OAuth, cookie-сессии, CSRF) также нужны переменные из
+[`.env.example`](.env.example): `GOOGLE_OAUTH_*`, `AUTH_ADMIN_EMAILS`,
+`SESSION_COOKIE_*`, `SESSION_TTL`, `CSRF_*`. Реальные секреты не коммитьте;
+в Docker Compose используются dev-placeholder значения, если переменные не заданы.
+
 ### 3. Миграции
 
 Примените миграции (см. раздел [Миграции](#миграции)).

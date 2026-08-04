@@ -4,7 +4,7 @@
 GET {{baseUrl}}/health
 
 ### Create ingredient
-POST {{baseUrl}}/ingredients
+POST {{baseUrl}}/api/v1/ingredients
 Content-Type: application/json
 
 {
@@ -15,29 +15,36 @@ Content-Type: application/json
     "ingredient_type": "крепкая часть"
 }
 
-### List ingredients
-GET {{baseUrl}}/ingredients
+### List ingredients (default pagination)
+GET {{baseUrl}}/api/v1/ingredients
+
+### List with filters and sort
+GET {{baseUrl}}/api/v1/ingredients?pageSize=10&sort=name&order=asc&name=дж&abv=крепкий&ingredient_type=крепкая часть
+
+### List next page
+GET {{baseUrl}}/api/v1/ingredients?pageSize=10&pageToken=PASTE_TOKEN_HERE
 
 ### Get ingredient by id
-GET {{baseUrl}}/ingredients/1
+GET {{baseUrl}}/api/v1/ingredients/1
 
 ### Get ingredient icon
-GET {{baseUrl}}/ingredients/1/icon
+GET {{baseUrl}}/api/v1/ingredients/1/icon
 
-### Partial update ingredient
-PATCH {{baseUrl}}/ingredients/1
+### Partial update ingredient (version required)
+PATCH {{baseUrl}}/api/v1/ingredients/1
 Content-Type: application/json
 
 {
+    "version": 1,
     "name": "Джин London Dry",
     "description": "Обновлённое описание"
 }
 
 ### Delete ingredient
-DELETE {{baseUrl}}/ingredients/1
+DELETE {{baseUrl}}/api/v1/ingredients/1
 
 ### Set ingredient icon
-PUT {{baseUrl}}/ingredients/1/icon
+PUT {{baseUrl}}/api/v1/ingredients/1/icon
 Content-Type: application/octet-stream
 
 < ./icon.png

@@ -4,9 +4,12 @@ import "errors"
 
 // ErrNotFound — sentinel для ошибок «ресурс не найден» (errors.Is(err, ErrNotFound)).
 var (
-	ErrNotFound        = errors.New("not found")
-	ErrAlreadyExists   = errors.New("already exists")
-	ErrVersionConflict = errors.New("version conflict")
+	ErrNotFound           = errors.New("not found")
+	ErrAlreadyExists      = errors.New("already exists")
+	ErrVersionConflict    = errors.New("version conflict")
+	ErrResourceInUse      = errors.New("resource in use")
+	ErrInvalidID          = errors.New("invalid id")
+	ErrServiceUnavailable = errors.New("service unavailable")
 
 	ErrInvalidIngredientData = errors.New("invalid ingredient data")
 	ErrInvalidPageToken      = errors.New("invalid page token")
@@ -93,4 +96,52 @@ func (e *InvalidPageTokenError) Unwrap() error {
 
 func NewErrInvalidPageToken(message string) error {
 	return &InvalidPageTokenError{Message: message}
+}
+
+type InvalidIDError struct {
+	Message string
+}
+
+func (e *InvalidIDError) Error() string {
+	return e.Message
+}
+
+func (e *InvalidIDError) Unwrap() error {
+	return ErrInvalidID
+}
+
+func NewErrInvalidID(message string) error {
+	return &InvalidIDError{Message: message}
+}
+
+type ResourceInUseError struct {
+	Message string
+}
+
+func (e *ResourceInUseError) Error() string {
+	return e.Message
+}
+
+func (e *ResourceInUseError) Unwrap() error {
+	return ErrResourceInUse
+}
+
+func NewErrResourceInUse(message string) error {
+	return &ResourceInUseError{Message: message}
+}
+
+type ServiceUnavailableError struct {
+	Message string
+}
+
+func (e *ServiceUnavailableError) Error() string {
+	return e.Message
+}
+
+func (e *ServiceUnavailableError) Unwrap() error {
+	return ErrServiceUnavailable
+}
+
+func NewErrServiceUnavailable(message string) error {
+	return &ServiceUnavailableError{Message: message}
 }

@@ -1,32 +1,96 @@
-export const API_BASE_URL = "/api";
+export const API_BASE_URL = "/api/v1";
+
+export type ErrorDetail = {
+  field: string;
+  message: string;
+};
 
 export class ApiError extends Error {
   readonly status: number;
+  readonly code: string;
+  readonly requestId?: string;
+  readonly details?: ErrorDetail[];
 
-  constructor(status: number, message: string) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    requestId?: string,
+    details?: ErrorDetail[],
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
+    this.requestId = requestId;
+    this.details = details;
   }
+}
+
+type StructuredErrorBody = {
+  error?: {
+    code?: string;
+    message?: string;
+    request_id?: string;
+    details?: ErrorDetail[];
+  };
+};
+
+type LegacyErrorBody = {
+  error?: string;
+};
+
+export function buildQueryString(
+  params: Record<string, string | number | undefined>,
+): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === "") {
+      continue;
+    }
+    search.set(key, String(value));
+  }
+  const query = search.toString();
+  return query ? `?${query}` : "";
 }
 
 export async function apiRequest<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, init);
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    credentials: "include",
+  });
 
   if (!response.ok) {
     let message = "Не удалось выполнить запрос";
+    let code = "UNKNOWN";
+    let requestId: string | undefined;
+    let details: ErrorDetail[] | undefined;
     try {
-      const body = (await response.json()) as { error?: string };
-      if (body.error) {
+      const body = (await response.json()) as
+        StructuredErrorBody | LegacyErrorBody;
+      if (
+        body.error &&
+        typeof body.error === "object" &&
+        "code" in body.error &&
+        body.error.code
+      ) {
+        const structured = body.error as NonNullable<
+          StructuredErrorBody["error"]
+        >;
+        code = structured.code ?? code;
+        message = structured.message ?? message;
+        requestId = structured.request_id;
+        details = structured.details;
+      } else if (typeof body.error === "string") {
         message = body.error;
       }
     } catch {
       // Backend может вернуть ответ без JSON при инфраструктурной ошибке.
     }
-    throw new ApiError(response.status, message);
+    throw new ApiError(response.status, code, message, requestId, details);
   }
 
   if (response.status === 204) {

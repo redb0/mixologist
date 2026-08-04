@@ -11,12 +11,10 @@ import (
 	"github.com/redb0/mixologist/internal/domain"
 )
 
-var (
-	ErrForeignKeyViolation = errors.New("нарушение внешнего ключа")
-	ErrCheckViolation      = errors.New("нарушение ограничения CHECK")
-	ErrDeadlock            = errors.New("ошибка deadlock")
-	ErrQueryCanceled       = errors.New("запрос отменен")
-	ErrConnectionFailed    = errors.New("не удалось установить соединение с базой данных")
+const (
+	serviceUnavailableMessage = "сервис временно недоступен"
+	validationDataMessage     = "некорректные данные запроса"
+	resourceInUseMessage      = "ингредиент используется и не может быть удалён"
 )
 
 func ParseDBError(err error) error {
@@ -28,18 +26,16 @@ func ParseDBError(err error) error {
 		return domain.NewErrNotFound("запись не найдена")
 	}
 
-	// Отмена / дедлайн запроса (typed context и строковые обёртки драйверов).
 	if errors.Is(err, context.Canceled) ||
 		errors.Is(err, context.DeadlineExceeded) ||
 		strings.Contains(err.Error(), "context canceled") ||
 		strings.Contains(err.Error(), "deadline exceeded") {
-		return ErrQueryCanceled
+		return domain.NewErrServiceUnavailable(serviceUnavailableMessage)
 	}
 
-	// Проблемы соединения с БД.
 	if strings.Contains(err.Error(), "timeout") ||
 		strings.Contains(err.Error(), "connection refused") {
-		return ErrConnectionFailed
+		return domain.NewErrServiceUnavailable(serviceUnavailableMessage)
 	}
 
 	var pgErr *pq.Error
@@ -51,13 +47,13 @@ func ParseDBError(err error) error {
 		case "23505": // unique violation
 			return domain.NewErrAlreadyExists("запись уже существует")
 		case "23503": // foreign key violation
-			return ErrForeignKeyViolation
+			return domain.NewErrResourceInUse(resourceInUseMessage)
 		case "23514": // check violation
-			return ErrCheckViolation
+			return domain.NewErrInvalidIngredientData(validationDataMessage)
 		case "40P01":
-			return ErrDeadlock
+			return domain.NewErrServiceUnavailable(serviceUnavailableMessage)
 		case "57014": // query canceled (timeout)
-			return ErrQueryCanceled
+			return domain.NewErrServiceUnavailable(serviceUnavailableMessage)
 		}
 	}
 

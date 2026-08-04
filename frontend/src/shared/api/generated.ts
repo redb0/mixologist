@@ -335,7 +335,7 @@ export interface components {
         /**
          * @description Opaque base64url token следующей страницы.
          *     Отвергается (`INVALID_PAGE_TOKEN`), если формат некорректен или
-         *     sort/order не совпадают с параметрами текущего запроса.
+         *     sort/order/pageSize не совпадают с параметрами текущего запроса.
          */
         PageToken: string;
         /** @description Поле сортировки. Допускается только одно значение. */
@@ -413,7 +413,7 @@ export interface operations {
                 /**
                  * @description Opaque base64url token следующей страницы.
                  *     Отвергается (`INVALID_PAGE_TOKEN`), если формат некорректен или
-                 *     sort/order не совпадают с параметрами текущего запроса.
+                 *     sort/order/pageSize не совпадают с параметрами текущего запроса.
                  */
                 pageToken?: components["parameters"]["PageToken"];
                 /** @description Поле сортировки. Допускается только одно значение. */

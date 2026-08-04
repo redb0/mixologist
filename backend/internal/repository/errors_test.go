@@ -40,57 +40,57 @@ func TestParseDBError(t *testing.T) {
 		{
 			name:   "foreign key 23503",
 			err:    &pq.Error{Code: "23503", Detail: "Key is not present"},
-			wantIs: ErrForeignKeyViolation,
+			wantIs: domain.ErrResourceInUse,
 		},
 		{
 			name:   "check violation 23514",
 			err:    &pq.Error{Code: "23514"},
-			wantIs: ErrCheckViolation,
+			wantIs: domain.ErrInvalidIngredientData,
 		},
 		{
 			name:   "deadlock 40P01",
 			err:    &pq.Error{Code: "40P01"},
-			wantIs: ErrDeadlock,
+			wantIs: domain.ErrServiceUnavailable,
 		},
 		{
 			name:   "query canceled 57014",
 			err:    &pq.Error{Code: "57014"},
-			wantIs: ErrQueryCanceled,
+			wantIs: domain.ErrServiceUnavailable,
 		},
 		{
 			name:   "timeout string",
 			err:    errors.New("i/o timeout"),
-			wantIs: ErrConnectionFailed,
+			wantIs: domain.ErrServiceUnavailable,
 		},
 		{
 			name:   "deadline exceeded string",
 			err:    errors.New("context deadline exceeded"),
-			wantIs: ErrQueryCanceled,
+			wantIs: domain.ErrServiceUnavailable,
 		},
 		{
 			name:   "context canceled string",
 			err:    errors.New("context canceled"),
-			wantIs: ErrQueryCanceled,
+			wantIs: domain.ErrServiceUnavailable,
 		},
 		{
 			name:   "connection refused string",
 			err:    errors.New("connection refused"),
-			wantIs: ErrConnectionFailed,
+			wantIs: domain.ErrServiceUnavailable,
 		},
 		{
 			name:   "context.Canceled",
 			err:    context.Canceled,
-			wantIs: ErrQueryCanceled,
+			wantIs: domain.ErrServiceUnavailable,
 		},
 		{
 			name:   "context.DeadlineExceeded",
 			err:    context.DeadlineExceeded,
-			wantIs: ErrQueryCanceled,
+			wantIs: domain.ErrServiceUnavailable,
 		},
 		{
 			name:   "wrapped context.DeadlineExceeded",
 			err:    fmt.Errorf("query: %w", context.DeadlineExceeded),
-			wantIs: ErrQueryCanceled,
+			wantIs: domain.ErrServiceUnavailable,
 		},
 		{
 			name: "unknown error passthrough",
@@ -124,6 +124,9 @@ func TestParseDBError(t *testing.T) {
 				// детали Postgres не должны попадать в Error()
 				if errors.Is(tt.wantIs, domain.ErrAlreadyExists) {
 					assert.Equal(t, "запись уже существует", got.Error())
+				}
+				if errors.Is(tt.wantIs, domain.ErrResourceInUse) {
+					assert.Equal(t, resourceInUseMessage, got.Error())
 				}
 				return
 			}

@@ -7,6 +7,32 @@ on:
     branches: [main]
 
 jobs:
+  openapi:
+    name: OpenAPI lint and check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint OpenAPI
+        working-directory: frontend
+        run: npm run api:lint
+
+      - name: Check generated DTO
+        working-directory: frontend
+        run: npm run api:check
+
   lint:
     name: Lint and format
     runs-on: ubuntu-latest
@@ -39,7 +65,7 @@ jobs:
           working-directory: backend
 
   frontend-checks:
-    name: Frontend lint and typecheck
+    name: Frontend lint, test and build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -58,11 +84,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run format check
+        run: npm run format:check
+
       - name: Run frontend lint
         run: npm run lint
 
       - name: Run frontend typecheck
         run: npm run typecheck
+
+      - name: Run frontend tests
+        run: npm run test
+
+      - name: Build frontend
+        run: npm run build
 
   test:
     name: Tests and coverage
@@ -90,3 +125,22 @@ jobs:
           files: backend/coverage.out
           flags: backend
           fail_ci_if_error: true
+
+  contract:
+    name: Contract tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Run contract tests
+        run: go test -race -timeout=10m ./internal/contract/...

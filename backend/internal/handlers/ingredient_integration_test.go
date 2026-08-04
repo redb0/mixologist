@@ -1,4 +1,4 @@
-package handlers
+package handlers_test
 
 import (
 	"bytes"
@@ -14,7 +14,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/redb0/mixologist/internal/domain"
+	"github.com/redb0/mixologist/internal/handlers"
+	"github.com/redb0/mixologist/internal/middleware"
 	"github.com/redb0/mixologist/internal/repository"
+	"github.com/redb0/mixologist/internal/router"
 	"github.com/redb0/mixologist/internal/services"
 	"github.com/redb0/mixologist/internal/testutil"
 	"github.com/stretchr/testify/suite"
@@ -39,16 +42,37 @@ func (suite *IngredientHandlerTestSuite) SetupSuite() {
 	suite.repository = repository.NewIngredientRepository(suite.pgContainer.DB)
 
 	service := services.NewIngredientService(suite.repository)
-	controller := NewIngredientController(service)
+	controller := handlers.NewIngredientController(service)
+	healthController := handlers.NewHealthController(suite.pgContainer.DB)
 
-	suite.router = gin.New()
-	suite.router.GET("/ingredients", controller.ListIngredients)
-	suite.router.GET("/ingredients/:id", controller.GetIngredient)
-	suite.router.GET("/ingredients/:id/icon", controller.GetIngredientIcon)
-	suite.router.POST("/ingredients", controller.CreateIngredient)
-	suite.router.PATCH("/ingredients/:id", controller.UpdateIngredient)
-	suite.router.DELETE("/ingredients/:id", controller.DeleteIngredient)
-	suite.router.PUT("/ingredients/:id/icon", controller.SetIngredientIcon)
+	suite.router = router.New(router.Dependencies{
+		HealthController:     healthController,
+		IngredientController: controller,
+	})
+}
+
+func (suite *IngredientHandlerTestSuite) assertStructuredError(
+	w *httptest.ResponseRecorder,
+	wantCode string,
+	wantMsg string,
+) {
+	var response handlers.ErrorResponse
+	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+	suite.Equal(wantCode, response.Error.Code)
+	suite.Equal(wantMsg, response.Error.Message)
+	suite.NotEmpty(response.Error.RequestID)
+	suite.Equal(response.Error.RequestID, w.Header().Get(middleware.RequestIDHeader))
+}
+
+func (suite *IngredientHandlerTestSuite) assertStructuredErrorCode(
+	w *httptest.ResponseRecorder,
+	wantCode string,
+) {
+	var response handlers.ErrorResponse
+	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+	suite.Equal(wantCode, response.Error.Code)
+	suite.NotEmpty(response.Error.Message)
+	suite.NotEmpty(response.Error.RequestID)
 }
 
 func (suite *IngredientHandlerTestSuite) TearDownTest() {
@@ -72,12 +96,12 @@ func (suite *IngredientHandlerTestSuite) TearDownSuite() {
 
 func (suite *IngredientHandlerTestSuite) TestListIngredients_200_Empty() {
 	w := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/ingredients", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/ingredients", nil)
 	suite.router.ServeHTTP(w, request)
 
 	suite.Equal(http.StatusOK, w.Code)
 
-	var response IngredientListResponse
+	var response handlers.IngredientListResponse
 	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
 	suite.Empty(response.Ingredients)
 	suite.Empty(response.NextPageToken)
@@ -105,12 +129,12 @@ func (suite *IngredientHandlerTestSuite) TestListIngredients_200() {
 	suite.Require().NoError(err)
 
 	w := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/ingredients", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/ingredients", nil)
 	suite.router.ServeHTTP(w, request)
 
 	suite.Equal(http.StatusOK, w.Code)
 
-	var response IngredientListResponse
+	var response handlers.IngredientListResponse
 	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
 	suite.Require().Len(response.Ingredients, 2)
 	suite.Equal(2, response.TotalSize)
@@ -160,11 +184,11 @@ func (suite *IngredientHandlerTestSuite) TestListIngredients_200_PaginationAndFi
 	suite.Require().NoError(err)
 
 	firstPageW := httptest.NewRecorder()
-	firstPageReq := httptest.NewRequest(http.MethodGet, "/ingredients?pageSize=2&sort=created_at&order=desc", nil)
+	firstPageReq := httptest.NewRequest(http.MethodGet, "/api/v1/ingredients?pageSize=2&sort=created_at&order=desc", nil)
 	suite.router.ServeHTTP(firstPageW, firstPageReq)
 
 	suite.Equal(http.StatusOK, firstPageW.Code)
-	var firstPage IngredientListResponse
+	var firstPage handlers.IngredientListResponse
 	suite.Require().NoError(json.Unmarshal(firstPageW.Body.Bytes(), &firstPage))
 	suite.Len(firstPage.Ingredients, 2)
 	suite.Equal(3, firstPage.TotalSize)
@@ -173,13 +197,13 @@ func (suite *IngredientHandlerTestSuite) TestListIngredients_200_PaginationAndFi
 	secondPageW := httptest.NewRecorder()
 	secondPageReq := httptest.NewRequest(
 		http.MethodGet,
-		"/ingredients?pageSize=2&sort=created_at&order=desc&pageToken="+firstPage.NextPageToken,
+		"/api/v1/ingredients?pageSize=2&sort=created_at&order=desc&pageToken="+firstPage.NextPageToken,
 		nil,
 	)
 	suite.router.ServeHTTP(secondPageW, secondPageReq)
 
 	suite.Equal(http.StatusOK, secondPageW.Code)
-	var secondPage IngredientListResponse
+	var secondPage handlers.IngredientListResponse
 	suite.Require().NoError(json.Unmarshal(secondPageW.Body.Bytes(), &secondPage))
 	suite.Len(secondPage.Ingredients, 1)
 	suite.Equal(3, secondPage.TotalSize)
@@ -190,11 +214,11 @@ func (suite *IngredientHandlerTestSuite) TestListIngredients_200_PaginationAndFi
 	filterParams.Set("name", "ник")
 	filterParams.Set("abv", "безалкогольный")
 	filterParams.Set("ingredient_type", "безалкогольная часть")
-	filterReq := httptest.NewRequest(http.MethodGet, "/ingredients?"+filterParams.Encode(), nil)
+	filterReq := httptest.NewRequest(http.MethodGet, "/api/v1/ingredients?"+filterParams.Encode(), nil)
 	suite.router.ServeHTTP(filterW, filterReq)
 
 	suite.Equal(http.StatusOK, filterW.Code)
-	var filtered IngredientListResponse
+	var filtered handlers.IngredientListResponse
 	suite.Require().NoError(json.Unmarshal(filterW.Body.Bytes(), &filtered))
 	suite.Len(filtered.Ingredients, 1)
 	suite.Equal("Тоник", filtered.Ingredients[0].Name)
@@ -206,20 +230,20 @@ func (suite *IngredientHandlerTestSuite) TestListIngredients_400_InvalidQueryPar
 		path       string
 		wantErrMsg string
 	}{
-		{name: "pageSize not number", path: "/ingredients?pageSize=abc", wantErrMsg: "недопустимое значение pageSize"},
-		{name: "pageSize zero", path: "/ingredients?pageSize=0", wantErrMsg: "pageSize должен быть от 1 до 100"},
-		{name: "pageSize too large", path: "/ingredients?pageSize=101", wantErrMsg: "pageSize должен быть от 1 до 100"},
-		{name: "invalid sort", path: "/ingredients?sort=invalid", wantErrMsg: "недопустимое значение sort"},
-		{name: "invalid order", path: "/ingredients?order=invalid", wantErrMsg: "недопустимое значение order"},
-		{name: "invalid abv", path: "/ingredients?abv=invalid", wantErrMsg: "недопустимое значение abv"},
+		{name: "pageSize not number", path: "/api/v1/ingredients?pageSize=abc", wantErrMsg: "недопустимое значение pageSize"},
+		{name: "pageSize zero", path: "/api/v1/ingredients?pageSize=0", wantErrMsg: "pageSize должен быть от 1 до 100"},
+		{name: "pageSize too large", path: "/api/v1/ingredients?pageSize=101", wantErrMsg: "pageSize должен быть от 1 до 100"},
+		{name: "invalid sort", path: "/api/v1/ingredients?sort=invalid", wantErrMsg: "недопустимое значение sort"},
+		{name: "invalid order", path: "/api/v1/ingredients?order=invalid", wantErrMsg: "недопустимое значение order"},
+		{name: "invalid abv", path: "/api/v1/ingredients?abv=invalid", wantErrMsg: "недопустимое значение abv"},
 		{
 			name:       "invalid ingredient_type",
-			path:       "/ingredients?ingredient_type=invalid",
+			path:       "/api/v1/ingredients?ingredient_type=invalid",
 			wantErrMsg: "недопустимое значение ingredient_type",
 		},
 		{
 			name:       "invalid page token",
-			path:       "/ingredients?pageToken=not-a-token",
+			path:       "/api/v1/ingredients?pageToken=not-a-token",
 			wantErrMsg: "Некорректный или несовместимый pageToken",
 		},
 	}
@@ -231,9 +255,11 @@ func (suite *IngredientHandlerTestSuite) TestListIngredients_400_InvalidQueryPar
 			suite.router.ServeHTTP(w, request)
 
 			suite.Equal(http.StatusBadRequest, w.Code)
-			var response gin.H
-			suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
-			suite.Equal(tt.wantErrMsg, response["error"])
+			if tt.name == "invalid page token" {
+				suite.assertStructuredError(w, handlers.CodeInvalidPageToken, tt.wantErrMsg)
+			} else {
+				suite.assertStructuredError(w, handlers.CodeValidationError, tt.wantErrMsg)
+			}
 		})
 	}
 }
@@ -250,13 +276,13 @@ func (suite *IngredientHandlerTestSuite) TestGetIngredientIcon_200() {
 	suite.Require().NoError(err)
 
 	w := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/ingredients/"+strconv.Itoa(int(ingredient.ID))+"/icon", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/ingredients/"+strconv.Itoa(int(ingredient.ID))+"/icon", nil)
 	suite.router.ServeHTTP(w, request)
 
 	suite.Equal(http.StatusOK, w.Code)
 	suite.Equal("image/png", w.Header().Get("Content-Type"))
 	suite.Equal(strconv.Itoa(len(icon)), w.Header().Get("Content-Length"))
-	suite.Equal(ingredientIconCacheControl, w.Header().Get("Cache-Control"))
+	suite.Equal("public, max-age=300, must-revalidate", w.Header().Get("Cache-Control"))
 	suite.Equal(icon, w.Body.Bytes())
 }
 
@@ -270,29 +296,29 @@ func (suite *IngredientHandlerTestSuite) TestGetIngredientIcon_404_Empty() {
 	suite.Require().NoError(err)
 
 	w := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/ingredients/"+strconv.Itoa(int(ingredient.ID))+"/icon", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/ingredients/"+strconv.Itoa(int(ingredient.ID))+"/icon", nil)
 	suite.router.ServeHTTP(w, request)
 
 	suite.Equal(http.StatusNotFound, w.Code)
-	suite.JSONEq(`{"error":"Иконка ингредиента не найдена"}`, w.Body.String())
+	suite.assertStructuredError(w, handlers.CodeNotFound, "Иконка ингредиента не найдена")
 }
 
 func (suite *IngredientHandlerTestSuite) TestGetIngredientIcon_404_IngredientNotFound() {
 	w := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/ingredients/42/icon", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/ingredients/42/icon", nil)
 	suite.router.ServeHTTP(w, request)
 
 	suite.Equal(http.StatusNotFound, w.Code)
-	suite.JSONEq(`{"error":"Ингредиент не найден"}`, w.Body.String())
+	suite.assertStructuredError(w, handlers.CodeNotFound, "Ингредиент не найден")
 }
 
 func (suite *IngredientHandlerTestSuite) TestGetIngredientIcon_400_InvalidID() {
 	w := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/ingredients/invalid/icon", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/ingredients/invalid/icon", nil)
 	suite.router.ServeHTTP(w, request)
 
 	suite.Equal(http.StatusBadRequest, w.Code)
-	suite.JSONEq(`{"error":"неверный ID ингредиента"}`, w.Body.String())
+	suite.assertStructuredError(w, handlers.CodeInvalidID, "Неверный ID ингредиента")
 }
 
 func (suite *IngredientHandlerTestSuite) TestCreateIngredient_201() {
@@ -304,13 +330,13 @@ func (suite *IngredientHandlerTestSuite) TestCreateIngredient_201() {
 		"ingredient_type": "крепкая часть"
 	}`
 	w := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/ingredients", bytes.NewBufferString(body))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/ingredients", bytes.NewBufferString(body))
 	request.Header.Set("Content-Type", "application/json")
 	suite.router.ServeHTTP(w, request)
 
 	suite.Equal(http.StatusCreated, w.Code)
 
-	var response IngredientResponse
+	var response handlers.IngredientResponse
 	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
 	suite.NotZero(response.ID)
 	suite.Equal("Джин", response.Name)
@@ -323,11 +349,11 @@ func (suite *IngredientHandlerTestSuite) TestCreateIngredient_201() {
 
 	// Сверяем, что GET возвращает те же поля
 	getW := httptest.NewRecorder()
-	getReq := httptest.NewRequest(http.MethodGet, "/ingredients/"+strconv.Itoa(int(response.ID)), nil)
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/ingredients/"+strconv.Itoa(int(response.ID)), nil)
 	suite.router.ServeHTTP(getW, getReq)
 	suite.Equal(http.StatusOK, getW.Code)
 
-	var got IngredientResponse
+	var got handlers.IngredientResponse
 	suite.Require().NoError(json.Unmarshal(getW.Body.Bytes(), &got))
 	suite.Equal(response.ID, got.ID)
 	suite.Equal(response.Name, got.Name)
@@ -347,13 +373,13 @@ func (suite *IngredientHandlerTestSuite) TestCreateIngredient_201_WithoutDescrip
 		"ingredient_type": "безалкогольная часть"
 	}`
 	w := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/ingredients", bytes.NewBufferString(body))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/ingredients", bytes.NewBufferString(body))
 	request.Header.Set("Content-Type", "application/json")
 	suite.router.ServeHTTP(w, request)
 
 	suite.Equal(http.StatusCreated, w.Code)
 
-	var response IngredientResponse
+	var response handlers.IngredientResponse
 	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
 	suite.NotZero(response.ID)
 	suite.Equal("Тоник", response.Name)
@@ -364,11 +390,11 @@ func (suite *IngredientHandlerTestSuite) TestCreateIngredient_201_WithoutDescrip
 	suite.False(response.HasIcon)
 
 	getW := httptest.NewRecorder()
-	getReq := httptest.NewRequest(http.MethodGet, "/ingredients/"+strconv.Itoa(int(response.ID)), nil)
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/ingredients/"+strconv.Itoa(int(response.ID)), nil)
 	suite.router.ServeHTTP(getW, getReq)
 	suite.Equal(http.StatusOK, getW.Code)
 
-	var got IngredientResponse
+	var got handlers.IngredientResponse
 	suite.Require().NoError(json.Unmarshal(getW.Body.Bytes(), &got))
 	suite.Equal(response.ID, got.ID)
 	suite.Equal(response.Name, got.Name)
@@ -462,17 +488,16 @@ func (suite *IngredientHandlerTestSuite) TestCreateIngredient_400() {
 	for _, tt := range cases {
 		suite.Run(tt.name, func() {
 			w := httptest.NewRecorder()
-			request := httptest.NewRequest(http.MethodPost, "/ingredients", bytes.NewBufferString(tt.body))
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/ingredients", bytes.NewBufferString(tt.body))
 			request.Header.Set("Content-Type", "application/json")
 			suite.router.ServeHTTP(w, request)
 
 			suite.Equal(http.StatusBadRequest, w.Code)
-
-			var response gin.H
-			suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
-			suite.NotEmpty(response["error"])
+			suite.assertStructuredErrorCode(w, handlers.CodeValidationError)
 			if tt.wantErrMsg != "" {
-				suite.Equal(tt.wantErrMsg, response["error"])
+				var response handlers.ErrorResponse
+				suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
+				suite.Contains(response.Error.Message, tt.wantErrMsg)
 			}
 		})
 	}
@@ -488,21 +513,18 @@ func (suite *IngredientHandlerTestSuite) TestCreateIngredient_409() {
 	}`
 
 	w1 := httptest.NewRecorder()
-	req1 := httptest.NewRequest(http.MethodPost, "/ingredients", bytes.NewBufferString(body))
+	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/ingredients", bytes.NewBufferString(body))
 	req1.Header.Set("Content-Type", "application/json")
 	suite.router.ServeHTTP(w1, req1)
 	suite.Equal(http.StatusCreated, w1.Code)
 
 	w2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodPost, "/ingredients", bytes.NewBufferString(body))
+	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/ingredients", bytes.NewBufferString(body))
 	req2.Header.Set("Content-Type", "application/json")
 	suite.router.ServeHTTP(w2, req2)
 
 	suite.Equal(http.StatusConflict, w2.Code)
-
-	var response gin.H
-	suite.Require().NoError(json.Unmarshal(w2.Body.Bytes(), &response))
-	suite.Equal("запись уже существует", response["error"])
+	suite.assertStructuredError(w2, handlers.CodeAlreadyExists, "запись уже существует")
 }
 
 func (suite *IngredientHandlerTestSuite) TestGetIngredient_400() {
@@ -510,8 +532,8 @@ func (suite *IngredientHandlerTestSuite) TestGetIngredient_400() {
 		name string
 		path string
 	}{
-		{name: "not a number", path: "/ingredients/not-a-number"},
-		{name: "zero", path: "/ingredients/0"},
+		{name: "not a number", path: "/api/v1/ingredients/not-a-number"},
+		{name: "zero", path: "/api/v1/ingredients/0"},
 	}
 	for _, tt := range cases {
 		suite.Run(tt.name, func() {
@@ -520,24 +542,18 @@ func (suite *IngredientHandlerTestSuite) TestGetIngredient_400() {
 			suite.router.ServeHTTP(w, request)
 
 			suite.Equal(http.StatusBadRequest, w.Code)
-
-			var response gin.H
-			suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
-			suite.Equal("неверный ID ингредиента", response["error"])
+			suite.assertStructuredError(w, handlers.CodeInvalidID, "Неверный ID ингредиента")
 		})
 	}
 }
 
 func (suite *IngredientHandlerTestSuite) TestGetIngredient_404() {
 	w := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/ingredients/42", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/ingredients/42", nil)
 	suite.router.ServeHTTP(w, request)
 
 	suite.Equal(http.StatusNotFound, w.Code)
-
-	var response gin.H
-	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
-	suite.Equal("Ингредиент не найден", response["error"])
+	suite.assertStructuredError(w, handlers.CodeNotFound, "Ингредиент не найден")
 }
 
 func (suite *IngredientHandlerTestSuite) TestGetIngredient_200() {
@@ -567,12 +583,12 @@ func (suite *IngredientHandlerTestSuite) TestGetIngredient_200() {
 			suite.Require().NoError(err)
 
 			w := httptest.NewRecorder()
-			request := httptest.NewRequest(http.MethodGet, "/ingredients/"+strconv.Itoa(int(createdIngredient.ID)), nil)
+			request := httptest.NewRequest(http.MethodGet, "/api/v1/ingredients/"+strconv.Itoa(int(createdIngredient.ID)), nil)
 			suite.router.ServeHTTP(w, request)
 
 			suite.Equal(http.StatusOK, w.Code)
 
-			var response IngredientResponse
+			var response handlers.IngredientResponse
 			suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
 			suite.Equal(createdIngredient.ID, response.ID)
 			suite.Equal(createdIngredient.Name, response.Name)
@@ -596,11 +612,11 @@ func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_200() {
 	})
 	suite.Require().NoError(err)
 
-	body := `{"name":"Джин London Dry","description":"Новое описание"}`
+	body := `{"version":1,"name":"Джин London Dry","description":"Новое описание"}`
 	w := httptest.NewRecorder()
 	request := httptest.NewRequest(
 		http.MethodPatch,
-		"/ingredients/"+strconv.Itoa(int(created.ID)),
+		"/api/v1/ingredients/"+strconv.Itoa(int(created.ID)),
 		bytes.NewBufferString(body),
 	)
 	request.Header.Set("Content-Type", "application/json")
@@ -608,7 +624,7 @@ func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_200() {
 
 	suite.Equal(http.StatusOK, w.Code)
 
-	var response IngredientResponse
+	var response handlers.IngredientResponse
 	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
 	suite.Equal(created.ID, response.ID)
 	suite.Equal("Джин London Dry", response.Name)
@@ -630,11 +646,11 @@ func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_200_WithIcon() {
 	})
 	suite.Require().NoError(err)
 
-	body := `{"description":"Знаменитый шведский бренд"}`
+	body := `{"version":1,"description":"Знаменитый шведский бренд"}`
 	w := httptest.NewRecorder()
 	request := httptest.NewRequest(
 		http.MethodPatch,
-		"/ingredients/"+strconv.Itoa(int(created.ID)),
+		"/api/v1/ingredients/"+strconv.Itoa(int(created.ID)),
 		bytes.NewBufferString(body),
 	)
 	request.Header.Set("Content-Type", "application/json")
@@ -642,7 +658,7 @@ func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_200_WithIcon() {
 
 	suite.Equal(http.StatusOK, w.Code)
 
-	var response IngredientResponse
+	var response handlers.IngredientResponse
 	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
 	suite.True(response.HasIcon)
 
@@ -661,11 +677,11 @@ func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_200_SameName() {
 	})
 	suite.Require().NoError(err)
 
-	body := `{"name":"Джин"}`
+	body := `{"version":1,"name":"Джин"}`
 	w := httptest.NewRecorder()
 	request := httptest.NewRequest(
 		http.MethodPatch,
-		"/ingredients/"+strconv.Itoa(int(created.ID)),
+		"/api/v1/ingredients/"+strconv.Itoa(int(created.ID)),
 		bytes.NewBufferString(body),
 	)
 	request.Header.Set("Content-Type", "application/json")
@@ -673,7 +689,7 @@ func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_200_SameName() {
 
 	suite.Equal(http.StatusOK, w.Code)
 
-	var response IngredientResponse
+	var response handlers.IngredientResponse
 	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
 	suite.Equal(created.ID, response.ID)
 	suite.Equal(created.Name, response.Name)
@@ -688,17 +704,14 @@ func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_400_InvalidID() {
 	w := httptest.NewRecorder()
 	request := httptest.NewRequest(
 		http.MethodPatch,
-		"/ingredients/invalid",
-		bytes.NewBufferString(`{"name":"Джин London Dry"}`),
+		"/api/v1/ingredients/invalid",
+		bytes.NewBufferString(`{"version":1,"name":"Джин London Dry"}`),
 	)
 	request.Header.Set("Content-Type", "application/json")
 	suite.router.ServeHTTP(w, request)
 
 	suite.Equal(http.StatusBadRequest, w.Code)
-
-	var response gin.H
-	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
-	suite.NotEmpty(response["error"])
+	suite.assertStructuredErrorCode(w, handlers.CodeInvalidID)
 }
 
 func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_400() {
@@ -711,16 +724,16 @@ func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_400() {
 	})
 	suite.Require().NoError(err)
 
-	path := "/ingredients/" + strconv.Itoa(int(created.ID))
+	path := "/api/v1/ingredients/" + strconv.Itoa(int(created.ID))
 	cases := []struct {
 		name string
 		body string
 	}{
 		{name: "empty body", body: `{}`},
 		{name: "bad json", body: `{`},
-		{name: "invalid enum", body: `{"unit_measurement":"invalid"}`},
-		{name: "empty name", body: `{"name":""}`},
-		{name: "short name", body: `{"name":"ab"}`},
+		{name: "invalid enum", body: `{"version":1,"unit_measurement":"invalid"}`},
+		{name: "empty name", body: `{"version":1,"name":""}`},
+		{name: "short name", body: `{"version":1,"name":"ab"}`},
 	}
 	for _, tt := range cases {
 		suite.Run(tt.name, func() {
@@ -730,26 +743,20 @@ func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_400() {
 			suite.router.ServeHTTP(w, request)
 
 			suite.Equal(http.StatusBadRequest, w.Code)
-
-			var response gin.H
-			suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
-			suite.NotEmpty(response["error"])
+			suite.assertStructuredErrorCode(w, handlers.CodeValidationError)
 		})
 	}
 }
 
 func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_404() {
-	body := `{"name":"Несуществующий"}`
+	body := `{"version":1,"name":"Несуществующий"}`
 	w := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPatch, "/ingredients/42", bytes.NewBufferString(body))
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/ingredients/42", bytes.NewBufferString(body))
 	request.Header.Set("Content-Type", "application/json")
 	suite.router.ServeHTTP(w, request)
 
 	suite.Equal(http.StatusNotFound, w.Code)
-
-	var response gin.H
-	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
-	suite.Equal("Ингредиент не найден", response["error"])
+	suite.assertStructuredError(w, handlers.CodeNotFound, "Ингредиент не найден")
 }
 
 func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_409() {
@@ -771,21 +778,53 @@ func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_409() {
 	})
 	suite.Require().NoError(err)
 
-	body := `{"name":"Ром"}`
+	body := `{"version":1,"name":"Ром"}`
 	w := httptest.NewRecorder()
 	request := httptest.NewRequest(
 		http.MethodPatch,
-		"/ingredients/"+strconv.Itoa(int(vodka.ID)),
+		"/api/v1/ingredients/"+strconv.Itoa(int(vodka.ID)),
 		bytes.NewBufferString(body),
 	)
 	request.Header.Set("Content-Type", "application/json")
 	suite.router.ServeHTTP(w, request)
 
 	suite.Equal(http.StatusConflict, w.Code)
+	suite.assertStructuredError(w, handlers.CodeAlreadyExists, "запись уже существует")
+}
 
-	var response gin.H
-	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
-	suite.Equal(response["error"], "запись уже существует")
+func (suite *IngredientHandlerTestSuite) TestUpdateIngredient_409_VersionConflict() {
+	created, err := suite.repository.Create(suite.ctx, &domain.Ingredient{
+		Name:            "Текила",
+		Description:     "Blanco",
+		UnitMeasurement: domain.UnitMl,
+		ABV:             domain.Strong,
+		IngredientType:  domain.StrongPart,
+	})
+	suite.Require().NoError(err)
+
+	firstPatch := `{"version":1,"description":"Reposado"}`
+	firstW := httptest.NewRecorder()
+	firstReq := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/ingredients/"+strconv.Itoa(int(created.ID)),
+		bytes.NewBufferString(firstPatch),
+	)
+	firstReq.Header.Set("Content-Type", "application/json")
+	suite.router.ServeHTTP(firstW, firstReq)
+	suite.Equal(http.StatusOK, firstW.Code)
+
+	stalePatch := `{"version":1,"description":"Anejo"}`
+	staleW := httptest.NewRecorder()
+	staleReq := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/ingredients/"+strconv.Itoa(int(created.ID)),
+		bytes.NewBufferString(stalePatch),
+	)
+	staleReq.Header.Set("Content-Type", "application/json")
+	suite.router.ServeHTTP(staleW, staleReq)
+
+	suite.Equal(http.StatusConflict, staleW.Code)
+	suite.assertStructuredError(staleW, handlers.CodeVersionConflict, "конфликт версии ингредиента")
 }
 
 func (suite *IngredientHandlerTestSuite) TestDeleteIngredient_204() {
@@ -801,7 +840,7 @@ func (suite *IngredientHandlerTestSuite) TestDeleteIngredient_204() {
 	w := httptest.NewRecorder()
 	request := httptest.NewRequest(
 		http.MethodDelete,
-		"/ingredients/"+strconv.Itoa(int(created.ID)),
+		"/api/v1/ingredients/"+strconv.Itoa(int(created.ID)),
 		nil,
 	)
 	suite.router.ServeHTTP(w, request)
@@ -818,8 +857,8 @@ func (suite *IngredientHandlerTestSuite) TestDeleteIngredient_400() {
 		name string
 		path string
 	}{
-		{name: "not a number", path: "/ingredients/not-a-number"},
-		{name: "zero", path: "/ingredients/0"},
+		{name: "not a number", path: "/api/v1/ingredients/not-a-number"},
+		{name: "zero", path: "/api/v1/ingredients/0"},
 	}
 	for _, tt := range cases {
 		suite.Run(tt.name, func() {
@@ -828,24 +867,18 @@ func (suite *IngredientHandlerTestSuite) TestDeleteIngredient_400() {
 			suite.router.ServeHTTP(w, request)
 
 			suite.Equal(http.StatusBadRequest, w.Code)
-
-			var response gin.H
-			suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
-			suite.Equal("неверный ID ингредиента", response["error"])
+			suite.assertStructuredError(w, handlers.CodeInvalidID, "Неверный ID ингредиента")
 		})
 	}
 }
 
 func (suite *IngredientHandlerTestSuite) TestDeleteIngredient_404() {
 	w := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodDelete, "/ingredients/42", nil)
+	request := httptest.NewRequest(http.MethodDelete, "/api/v1/ingredients/42", nil)
 	suite.router.ServeHTTP(w, request)
 
 	suite.Equal(http.StatusNotFound, w.Code)
-
-	var response gin.H
-	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
-	suite.Equal("Ингредиент не найден", response["error"])
+	suite.assertStructuredError(w, handlers.CodeNotFound, "Ингредиент не найден")
 }
 
 func (suite *IngredientHandlerTestSuite) TestSetIngredientIcon_204() {
@@ -862,7 +895,7 @@ func (suite *IngredientHandlerTestSuite) TestSetIngredientIcon_204() {
 	w := httptest.NewRecorder()
 	request := httptest.NewRequest(
 		http.MethodPut,
-		"/ingredients/"+strconv.Itoa(int(created.ID))+"/icon",
+		"/api/v1/ingredients/"+strconv.Itoa(int(created.ID))+"/icon",
 		bytes.NewReader(icon),
 	)
 	request.Header.Set("Content-Type", "application/octet-stream")
@@ -880,11 +913,11 @@ func (suite *IngredientHandlerTestSuite) TestSetIngredientIcon_204() {
 	suite.Equal(icon, newIcon)
 
 	getW := httptest.NewRecorder()
-	getReq := httptest.NewRequest(http.MethodGet, "/ingredients/"+strconv.Itoa(int(created.ID)), nil)
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/ingredients/"+strconv.Itoa(int(created.ID)), nil)
 	suite.router.ServeHTTP(getW, getReq)
 	suite.Equal(http.StatusOK, getW.Code)
 
-	var response IngredientResponse
+	var response handlers.IngredientResponse
 	suite.Require().NoError(json.Unmarshal(getW.Body.Bytes(), &response))
 	suite.True(response.HasIcon)
 }
@@ -899,28 +932,31 @@ func (suite *IngredientHandlerTestSuite) TestSetIngredientIcon_400() {
 	})
 	suite.Require().NoError(err)
 
-	path := "/ingredients/" + strconv.Itoa(int(created.ID)) + "/icon"
+	path := "/api/v1/ingredients/" + strconv.Itoa(int(created.ID)) + "/icon"
 	cases := []struct {
 		name       string
 		path       string
 		body       []byte
+		wantCode   string
 		wantErrMsg string
 	}{
-		{name: "empty body", path: path, body: nil, wantErrMsg: "иконка не может быть пустой"},
+		{name: "empty body", path: path, body: nil, wantCode: handlers.CodeValidationError, wantErrMsg: "иконка не может быть пустой"},
 		{
 			name:       "too large",
 			path:       path,
 			body:       make([]byte, services.MaxIconSize+1),
+			wantCode:   handlers.CodeValidationError,
 			wantErrMsg: "иконка слишком большая (макс. 512 KB)",
 		},
 		{
 			name:       "invalid format",
 			path:       path,
 			body:       []byte("GIF89a"),
+			wantCode:   handlers.CodeValidationError,
 			wantErrMsg: "иконка должна быть в формате PNG или JPEG",
 		},
-		{name: "invalid id", path: "/ingredients/not-a-number/icon", body: []byte{1}, wantErrMsg: "неверный ID ингредиента"},
-		{name: "zero id", path: "/ingredients/0/icon", body: []byte{1}, wantErrMsg: "неверный ID ингредиента"},
+		{name: "invalid id", path: "/api/v1/ingredients/not-a-number/icon", body: []byte{1}, wantCode: handlers.CodeInvalidID, wantErrMsg: "Неверный ID ингредиента"},
+		{name: "zero id", path: "/api/v1/ingredients/0/icon", body: []byte{1}, wantCode: handlers.CodeInvalidID, wantErrMsg: "Неверный ID ингредиента"},
 	}
 	for _, tt := range cases {
 		suite.Run(tt.name, func() {
@@ -930,10 +966,7 @@ func (suite *IngredientHandlerTestSuite) TestSetIngredientIcon_400() {
 			suite.router.ServeHTTP(w, request)
 
 			suite.Equal(http.StatusBadRequest, w.Code)
-
-			var response gin.H
-			suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
-			suite.Equal(tt.wantErrMsg, response["error"])
+			suite.assertStructuredError(w, tt.wantCode, tt.wantErrMsg)
 		})
 	}
 }
@@ -942,17 +975,14 @@ func (suite *IngredientHandlerTestSuite) TestSetIngredientIcon_404() {
 	w := httptest.NewRecorder()
 	request := httptest.NewRequest(
 		http.MethodPut,
-		"/ingredients/42/icon",
+		"/api/v1/ingredients/42/icon",
 		bytes.NewReader([]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}),
 	)
 	request.Header.Set("Content-Type", "application/octet-stream")
 	suite.router.ServeHTTP(w, request)
 
 	suite.Equal(http.StatusNotFound, w.Code)
-
-	var response gin.H
-	suite.Require().NoError(json.Unmarshal(w.Body.Bytes(), &response))
-	suite.Equal("Ингредиент не найден", response["error"])
+	suite.assertStructuredError(w, handlers.CodeNotFound, "Ингредиент не найден")
 }
 
 func TestIngredientHandlerTestSuite(t *testing.T) {

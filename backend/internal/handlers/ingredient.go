@@ -68,7 +68,7 @@ func (c *IngredientController) GetIngredientIcon(ctx *gin.Context) {
 func (c *IngredientController) CreateIngredient(ctx *gin.Context) {
 	var ingredientRequest CreateIngredientRequest
 	if err := ctx.ShouldBindJSON(&ingredientRequest); err != nil {
-		RespondError(ctx, domain.NewErrInvalidIngredientData(err.Error()))
+		RespondError(ctx, domain.NewErrInvalidIngredientData("некорректные данные запроса"))
 		return
 	}
 
@@ -96,11 +96,12 @@ func (c *IngredientController) UpdateIngredient(ctx *gin.Context) {
 
 	var req UpdateIngredientRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		RespondError(ctx, domain.NewErrInvalidIngredientData(err.Error()))
+		RespondError(ctx, domain.NewErrInvalidIngredientData("некорректные данные запроса"))
 		return
 	}
 
 	ingredient, err := c.service.Update(ctx, id, services.UpdateIngredientPatch{
+		ExpectedVersion: req.Version,
 		Name:            req.Name,
 		Description:     req.Description,
 		UnitMeasurement: req.UnitMeasurement,
@@ -158,7 +159,7 @@ func (c *IngredientController) SetIngredientIcon(ctx *gin.Context) {
 func parseIngredientID(ctx *gin.Context) (uint, error) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		return 0, domain.NewErrInvalidIngredientData("неверный ID ингредиента")
+		return 0, domain.NewErrInvalidID("Неверный ID ингредиента")
 	}
 	return uint(id), nil
 }

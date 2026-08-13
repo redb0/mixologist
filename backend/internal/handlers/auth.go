@@ -36,7 +36,7 @@ const (
 	CodeCSRFTokenInvalid    = "CSRF_TOKEN_INVALID"
 )
 
-var returnToPattern = regexp.MustCompile(`^/(?:$|[^/\s][^\s]*)$`)
+var returnToPattern = regexp.MustCompile(`^/(?:$|[^/\\\s][^\\\s]*)$`)
 
 type AuthController struct {
 	authService      services.AuthService

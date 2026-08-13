@@ -1074,6 +1074,8 @@ func TestValidateReturnTo(t *testing.T) {
 		{name: "path with query", raw: "/ingredients?sort=name", want: "/ingredients?sort=name"},
 		{name: "absolute url", raw: "https://evil.example", wantErr: true},
 		{name: "protocol-relative url", raw: "//evil.example", wantErr: true},
+		{name: "backslash", raw: `/\evil.example`, wantErr: true},
+		{name: "backslash in path", raw: `/foo\bar`, wantErr: true},
 		{name: "too long", raw: "/" + strings.Repeat("a", returnToMaxLength), wantErr: true},
 	}
 

@@ -43,12 +43,12 @@ services:
       context: ./backend
     environment:
       DB_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-mixologist}?sslmode=disable
-      GIN_MODE: ${GIN_MODE:-debug}
+      GIN_MODE: ${GIN_MODE:-release}
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-local-dev-google-client-id}
       GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-local-dev-google-client-secret}
       GOOGLE_OAUTH_CALLBACK_URL: ${GOOGLE_OAUTH_CALLBACK_URL:-http://localhost:8080/api/v1/auth/google/callback}
       AUTH_ADMIN_EMAILS: ${AUTH_ADMIN_EMAILS:-admin@example.com}
-      SESSION_COOKIE_SECRET: ${SESSION_COOKIE_SECRET:-local-dev-session-secret-at-least-32-chars}
+      SESSION_COOKIE_SECRET: ${SESSION_COOKIE_SECRET:?set SESSION_COOKIE_SECRET (min 32 chars) in .env}
       SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-session}
       SESSION_COOKIE_DOMAIN: ${SESSION_COOKIE_DOMAIN:-}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}

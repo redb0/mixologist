@@ -155,6 +155,42 @@ func TestAuthService_CreateSession_StoresOnlyTokenHash(t *testing.T) {
 	}
 }
 
+func TestAuthService_CreateSession_RepositoryError(t *testing.T) {
+	repoErr := errors.New("db unavailable")
+	repo := &mockSessionRepository{
+		create: func(ctx context.Context, session *domain.Session) (*domain.Session, error) {
+			return nil, repoErr
+		},
+	}
+	service := NewAuthService(&mockUserRepository{}, repo, nil)
+
+	rawToken, session, err := service.CreateSession(context.Background(), 11, time.Hour, time.Now(), nil)
+	if rawToken != "" || session != nil {
+		t.Fatal("session must not be created on repository error")
+	}
+	if !errors.Is(err, repoErr) {
+		t.Fatalf("expected repository error, got %v", err)
+	}
+}
+
+func TestAuthService_GetActiveSessionByRawToken_RepositoryError(t *testing.T) {
+	repoErr := errors.New("db unavailable")
+	repo := &mockSessionRepository{
+		getActiveByTokenHash: func(ctx context.Context, tokenHash string, now time.Time) (*domain.Session, error) {
+			return nil, repoErr
+		},
+	}
+	service := NewAuthService(&mockUserRepository{}, repo, nil)
+
+	session, err := service.GetActiveSessionByRawToken(context.Background(), "token", time.Now())
+	if session != nil {
+		t.Fatal("session should be nil")
+	}
+	if !errors.Is(err, repoErr) {
+		t.Fatalf("expected repository error, got %v", err)
+	}
+}
+
 func TestAuthService_GetActiveSessionByRawToken_NotFoundReturnsUnauthorized(t *testing.T) {
 	repo := &mockSessionRepository{
 		getActiveByTokenHash: func(ctx context.Context, tokenHash string, now time.Time) (*domain.Session, error) {
@@ -172,6 +208,49 @@ func TestAuthService_GetActiveSessionByRawToken_NotFoundReturnsUnauthorized(t *t
 	}
 }
 
+func TestAuthService_RevokeSessionByRawToken_Success(t *testing.T) {
+	var gotHash string
+	repo := &mockSessionRepository{
+		revokeByTokenHash: func(ctx context.Context, tokenHash string, revokedAt time.Time) error {
+			gotHash = tokenHash
+			return nil
+		},
+	}
+	service := NewAuthService(&mockUserRepository{}, repo, nil)
+
+	err := service.RevokeSessionByRawToken(context.Background(), "token", time.Now())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotHash != hashToken("token") {
+		t.Fatal("token hash mismatch")
+	}
+}
+
+func TestAuthService_RevokeSessionByRawToken_EmptyToken(t *testing.T) {
+	service := NewAuthService(&mockUserRepository{}, &mockSessionRepository{}, nil)
+
+	err := service.RevokeSessionByRawToken(context.Background(), "   ", time.Now())
+	if !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("expected unauthorized error, got %v", err)
+	}
+}
+
+func TestAuthService_RevokeSessionByRawToken_RepositoryError(t *testing.T) {
+	repoErr := errors.New("db unavailable")
+	repo := &mockSessionRepository{
+		revokeByTokenHash: func(ctx context.Context, tokenHash string, revokedAt time.Time) error {
+			return repoErr
+		},
+	}
+	service := NewAuthService(&mockUserRepository{}, repo, nil)
+
+	err := service.RevokeSessionByRawToken(context.Background(), "token", time.Now())
+	if !errors.Is(err, repoErr) {
+		t.Fatalf("expected repository error, got %v", err)
+	}
+}
+
 func TestAuthService_RevokeSessionByRawToken_NotFoundReturnsUnauthorized(t *testing.T) {
 	repo := &mockSessionRepository{
 		revokeByTokenHash: func(ctx context.Context, tokenHash string, revokedAt time.Time) error {
@@ -181,6 +260,128 @@ func TestAuthService_RevokeSessionByRawToken_NotFoundReturnsUnauthorized(t *test
 	service := NewAuthService(&mockUserRepository{}, repo, nil)
 
 	err := service.RevokeSessionByRawToken(context.Background(), "token", time.Now())
+	if !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("expected unauthorized error, got %v", err)
+	}
+}
+
+func TestAuthService_UpsertGoogleUser_AssignsUserRoleOutsideAllowlist(t *testing.T) {
+	var gotRole domain.UserRole
+	users := &mockUserRepository{
+		upsertGoogleUser: func(
+			ctx context.Context,
+			identity domain.GoogleIdentity,
+			role domain.UserRole,
+			loginAt time.Time,
+		) (*domain.User, error) {
+			gotRole = role
+			return &domain.User{ID: 1, Role: role, Email: identity.Email}, nil
+		},
+	}
+	service := NewAuthService(users, &mockSessionRepository{}, []string{"admin@example.com"})
+
+	user, err := service.UpsertGoogleUser(context.Background(), domain.GoogleIdentity{
+		Subject:     "google-subject",
+		Email:       "user@example.com",
+		DisplayName: "Regular User",
+	}, time.Now())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotRole != domain.UserRoleUser {
+		t.Fatalf("role mismatch: got %q want %q", gotRole, domain.UserRoleUser)
+	}
+	if user.Role != domain.UserRoleUser {
+		t.Fatalf("user role mismatch: got %q", user.Role)
+	}
+}
+
+func TestAuthService_UpsertGoogleUser_Validation(t *testing.T) {
+	service := NewAuthService(&mockUserRepository{}, &mockSessionRepository{}, nil)
+	tests := []struct {
+		name     string
+		identity domain.GoogleIdentity
+	}{
+		{
+			name:     "empty subject",
+			identity: domain.GoogleIdentity{Email: "user@example.com", DisplayName: "User"},
+		},
+		{
+			name:     "empty email",
+			identity: domain.GoogleIdentity{Subject: "subject", DisplayName: "User"},
+		},
+		{
+			name:     "whitespace email",
+			identity: domain.GoogleIdentity{Subject: "subject", Email: "   ", DisplayName: "User"},
+		},
+		{
+			name:     "empty display name",
+			identity: domain.GoogleIdentity{Subject: "subject", Email: "user@example.com"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			user, err := service.UpsertGoogleUser(context.Background(), tt.identity, time.Now())
+			if user != nil {
+				t.Fatal("user should be nil")
+			}
+			if !errors.Is(err, domain.ErrInvalidAuthData) {
+				t.Fatalf("expected invalid auth data, got %v", err)
+			}
+		})
+	}
+}
+
+func TestAuthService_CreateSession_Validation(t *testing.T) {
+	service := NewAuthService(&mockUserRepository{}, &mockSessionRepository{}, nil)
+
+	_, session, err := service.CreateSession(context.Background(), 0, time.Hour, time.Now(), nil)
+	if session != nil {
+		t.Fatal("session should be nil")
+	}
+	if !errors.Is(err, domain.ErrInvalidAuthData) {
+		t.Fatalf("expected invalid auth data for user_id=0, got %v", err)
+	}
+
+	_, session, err = service.CreateSession(context.Background(), 1, 0, time.Now(), nil)
+	if session != nil {
+		t.Fatal("session should be nil")
+	}
+	if !errors.Is(err, domain.ErrInvalidAuthData) {
+		t.Fatalf("expected invalid auth data for ttl=0, got %v", err)
+	}
+}
+
+func TestAuthService_GetActiveSessionByRawToken_EmptyToken(t *testing.T) {
+	service := NewAuthService(&mockUserRepository{}, &mockSessionRepository{}, nil)
+
+	session, err := service.GetActiveSessionByRawToken(context.Background(), "   ", time.Now())
+	if session != nil {
+		t.Fatal("session should be nil")
+	}
+	if !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("expected unauthorized error, got %v", err)
+	}
+}
+
+func TestAuthService_GetUserBySessionToken_UserNotFound(t *testing.T) {
+	repo := &mockSessionRepository{
+		getActiveByTokenHash: func(ctx context.Context, tokenHash string, now time.Time) (*domain.Session, error) {
+			return &domain.Session{UserID: 7}, nil
+		},
+	}
+	users := &mockUserRepository{
+		getByID: func(ctx context.Context, id uint) (*domain.User, error) {
+			return nil, domain.NewErrNotFound("пользователь не найден")
+		},
+	}
+	service := NewAuthService(users, repo, nil)
+
+	user, err := service.GetUserBySessionToken(context.Background(), "token", time.Now())
+	if user != nil {
+		t.Fatal("user should be nil")
+	}
 	if !errors.Is(err, domain.ErrUnauthorized) {
 		t.Fatalf("expected unauthorized error, got %v", err)
 	}
@@ -200,6 +401,46 @@ func TestAuthService_CleanupExpiredOrRevokedSessions(t *testing.T) {
 	}
 	if deleted != 3 {
 		t.Fatalf("deleted count mismatch: got %d", deleted)
+	}
+}
+
+func TestAuthService_GetUserBySessionToken_UserLookupError(t *testing.T) {
+	repoErr := errors.New("db unavailable")
+	repo := &mockSessionRepository{
+		getActiveByTokenHash: func(ctx context.Context, tokenHash string, now time.Time) (*domain.Session, error) {
+			return &domain.Session{UserID: 7}, nil
+		},
+	}
+	users := &mockUserRepository{
+		getByID: func(ctx context.Context, id uint) (*domain.User, error) {
+			return nil, repoErr
+		},
+	}
+	service := NewAuthService(users, repo, nil)
+
+	user, err := service.GetUserBySessionToken(context.Background(), "token", time.Now())
+	if user != nil {
+		t.Fatal("user should be nil")
+	}
+	if !errors.Is(err, repoErr) {
+		t.Fatalf("expected repository error, got %v", err)
+	}
+}
+
+func TestAuthService_GetUserBySessionToken_InvalidSession(t *testing.T) {
+	repo := &mockSessionRepository{
+		getActiveByTokenHash: func(ctx context.Context, tokenHash string, now time.Time) (*domain.Session, error) {
+			return nil, domain.NewErrNotFound("сессия не найдена")
+		},
+	}
+	service := NewAuthService(&mockUserRepository{}, repo, nil)
+
+	user, err := service.GetUserBySessionToken(context.Background(), "token", time.Now())
+	if user != nil {
+		t.Fatal("user should be nil")
+	}
+	if !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("expected unauthorized error, got %v", err)
 	}
 }
 

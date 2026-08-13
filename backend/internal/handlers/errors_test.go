@@ -26,6 +26,13 @@ func TestMapError(t *testing.T) {
 			wantMsg:    "нет полей для обновления",
 		},
 		{
+			name:       "invalid auth data",
+			err:        domain.NewErrInvalidAuthData("email обязателен"),
+			wantStatus: http.StatusBadRequest,
+			wantCode:   CodeValidationError,
+			wantMsg:    "email обязателен",
+		},
+		{
 			name:       "invalid id",
 			err:        domain.NewErrInvalidID("Неверный ID ингредиента"),
 			wantStatus: http.StatusBadRequest,
@@ -59,6 +66,20 @@ func TestMapError(t *testing.T) {
 			wantStatus: http.StatusConflict,
 			wantCode:   CodeResourceInUse,
 			wantMsg:    "Ингредиент используется и не может быть удалён",
+		},
+		{
+			name:       "unauthorized",
+			err:        domain.NewErrUnauthorized("сессия недействительна"),
+			wantStatus: http.StatusUnauthorized,
+			wantCode:   CodeUnauthorized,
+			wantMsg:    "сессия недействительна",
+		},
+		{
+			name:       "forbidden",
+			err:        domain.NewErrForbidden("доступ запрещен"),
+			wantStatus: http.StatusForbidden,
+			wantCode:   CodeForbidden,
+			wantMsg:    "доступ запрещен",
 		},
 		{
 			name:       "not found",

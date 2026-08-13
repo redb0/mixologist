@@ -20,6 +20,8 @@ const (
 	CodeAlreadyExists      = "ALREADY_EXISTS"
 	CodeVersionConflict    = "VERSION_CONFLICT"
 	CodeResourceInUse      = "RESOURCE_IN_USE"
+	CodeUnauthorized       = "UNAUTHORIZED"
+	CodeForbidden          = "FORBIDDEN"
 	CodeInternalError      = "INTERNAL_ERROR"
 	CodeServiceUnavailable = "SERVICE_UNAVAILABLE"
 )
@@ -68,6 +70,11 @@ func mapError(err error) mappedError {
 		return mappedError{http.StatusBadRequest, CodeValidationError, invalidData.Message}
 	}
 
+	var invalidAuthData *domain.InvalidAuthDataError
+	if errors.As(err, &invalidAuthData) {
+		return mappedError{http.StatusBadRequest, CodeValidationError, invalidAuthData.Message}
+	}
+
 	var alreadyExists *domain.AlreadyExistsError
 	if errors.As(err, &alreadyExists) {
 		return mappedError{http.StatusConflict, CodeAlreadyExists, alreadyExists.Message}
@@ -81,6 +88,16 @@ func mapError(err error) mappedError {
 	var resourceInUse *domain.ResourceInUseError
 	if errors.As(err, &resourceInUse) {
 		return mappedError{http.StatusConflict, CodeResourceInUse, resourceInUse.Message}
+	}
+
+	var unauthorized *domain.UnauthorizedError
+	if errors.As(err, &unauthorized) {
+		return mappedError{http.StatusUnauthorized, CodeUnauthorized, unauthorized.Message}
+	}
+
+	var forbidden *domain.ForbiddenError
+	if errors.As(err, &forbidden) {
+		return mappedError{http.StatusForbidden, CodeForbidden, forbidden.Message}
 	}
 
 	var notFound *domain.NotFoundError

@@ -76,13 +76,18 @@ func main() {
 	defer func() { _ = db.Close() }()
 
 	ingredientRepository := repository.NewIngredientRepository(db)
+	userRepository := repository.NewUserRepository(db)
+	sessionRepository := repository.NewSessionRepository(db)
 	ingredientService := services.NewIngredientService(ingredientRepository)
+	authService := services.NewAuthService(userRepository, sessionRepository, cfg.Auth.AdminEmails)
 	ingredientController := handlers.NewIngredientController(ingredientService)
+	authController := handlers.NewAuthController(authService, handlers.NewGoogleOAuthClient(cfg.Auth), cfg.Auth)
 	healthController := handlers.NewHealthController(db)
 
 	app := router.New(router.Dependencies{
 		HealthController:     healthController,
 		IngredientController: ingredientController,
+		AuthController:       authController,
 	})
 
 	if err := app.Run(cfg.HTTPAddr); err != nil {

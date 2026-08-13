@@ -26,6 +26,7 @@ type AuthService interface {
 		metadata map[string]any,
 	) (string, *domain.Session, error)
 	GetActiveSessionByRawToken(ctx context.Context, rawToken string, now time.Time) (*domain.Session, error)
+	GetUserBySessionToken(ctx context.Context, rawToken string, now time.Time) (*domain.User, error)
 	RevokeSessionByRawToken(ctx context.Context, rawToken string, now time.Time) error
 	CleanupExpiredOrRevokedSessions(ctx context.Context, now time.Time) (int64, error)
 }
@@ -145,6 +146,25 @@ func (s *authService) RevokeSessionByRawToken(ctx context.Context, rawToken stri
 		return err
 	}
 	return nil
+}
+
+func (s *authService) GetUserBySessionToken(
+	ctx context.Context,
+	rawToken string,
+	now time.Time,
+) (*domain.User, error) {
+	session, err := s.GetActiveSessionByRawToken(ctx, rawToken, now.UTC())
+	if err != nil {
+		return nil, err
+	}
+	user, err := s.users.GetByID(ctx, session.UserID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, domain.NewErrUnauthorized("сессия недействительна")
+		}
+		return nil, err
+	}
+	return user, nil
 }
 
 func (s *authService) CleanupExpiredOrRevokedSessions(ctx context.Context, now time.Time) (int64, error) {

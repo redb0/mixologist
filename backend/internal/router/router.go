@@ -13,6 +13,7 @@ import (
 type Dependencies struct {
 	HealthController     *handlers.HealthController
 	IngredientController *handlers.IngredientController
+	AuthController       *handlers.AuthController
 }
 
 func New(deps Dependencies) *gin.Engine {
@@ -34,6 +35,12 @@ func New(deps Dependencies) *gin.Engine {
 	r.GET("/health", deps.HealthController.GetHealth)
 
 	v1 := r.Group("/api/v1")
+	if deps.AuthController != nil {
+		v1.GET("/auth/google/login", deps.AuthController.StartGoogleLogin)
+		v1.GET("/auth/google/callback", deps.AuthController.HandleGoogleCallback)
+		v1.GET("/auth/me", deps.AuthController.GetCurrentUser)
+		v1.POST("/auth/logout", deps.AuthController.Logout)
+	}
 	v1.GET("/ingredients", deps.IngredientController.ListIngredients)
 	v1.GET("/ingredients/:id", deps.IngredientController.GetIngredient)
 	v1.GET("/ingredients/:id/icon", deps.IngredientController.GetIngredientIcon)

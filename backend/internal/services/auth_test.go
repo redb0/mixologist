@@ -16,6 +16,7 @@ type mockUserRepository struct {
 		role domain.UserRole,
 		loginAt time.Time,
 	) (*domain.User, error)
+	getByID func(ctx context.Context, id uint) (*domain.User, error)
 }
 
 func (m *mockUserRepository) UpsertGoogleUser(
@@ -31,7 +32,10 @@ func (m *mockUserRepository) UpsertGoogleUser(
 }
 
 func (m *mockUserRepository) GetByID(ctx context.Context, id uint) (*domain.User, error) {
-	panic("unexpected call to GetByID")
+	if m.getByID == nil {
+		panic("unexpected call to GetByID")
+	}
+	return m.getByID(ctx, id)
 }
 
 type mockSessionRepository struct {
@@ -196,5 +200,30 @@ func TestAuthService_CleanupExpiredOrRevokedSessions(t *testing.T) {
 	}
 	if deleted != 3 {
 		t.Fatalf("deleted count mismatch: got %d", deleted)
+	}
+}
+
+func TestAuthService_GetUserBySessionToken(t *testing.T) {
+	repo := &mockSessionRepository{
+		getActiveByTokenHash: func(ctx context.Context, tokenHash string, now time.Time) (*domain.Session, error) {
+			return &domain.Session{UserID: 7}, nil
+		},
+	}
+	users := &mockUserRepository{
+		getByID: func(ctx context.Context, id uint) (*domain.User, error) {
+			if id != 7 {
+				t.Fatalf("unexpected user id: %d", id)
+			}
+			return &domain.User{ID: 7, Email: "user@example.com"}, nil
+		},
+	}
+	service := NewAuthService(users, repo, nil)
+
+	user, err := service.GetUserBySessionToken(context.Background(), "token", time.Now())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if user.ID != 7 {
+		t.Fatalf("user ID mismatch: got %d", user.ID)
 	}
 }

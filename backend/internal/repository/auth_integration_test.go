@@ -115,6 +115,69 @@ func (suite *AuthRepositoryTestSuite) TestUpsertGoogleUser_DuplicateEmail() {
 	assert.True(t, errors.Is(err, domain.ErrAlreadyExists))
 }
 
+func (suite *AuthRepositoryTestSuite) TestGetByID() {
+	t := suite.T()
+	now := time.Now().UTC().Add(-time.Hour)
+	created, err := suite.users.UpsertGoogleUser(
+		suite.ctx,
+		domain.GoogleIdentity{
+			Subject:     "google-subject-1",
+			Email:       "user@example.com",
+			DisplayName: "User One",
+			AvatarURL:   "https://example.com/avatar-1.png",
+		},
+		domain.UserRoleUser,
+		now,
+	)
+	assert.NoError(t, err)
+	assert.NotZero(t, created.ID)
+
+	got, err := suite.users.GetByID(suite.ctx, created.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, created.ID, got.ID)
+	assert.Equal(t, "google-subject-1", got.GoogleSubject)
+	assert.Equal(t, "user@example.com", got.Email)
+	assert.Equal(t, "User One", got.DisplayName)
+	assert.Equal(t, "https://example.com/avatar-1.png", got.AvatarURL)
+	assert.Equal(t, domain.UserRoleUser, got.Role)
+	assert.Equal(t, created.CreatedAt, got.CreatedAt)
+	assert.Equal(t, created.UpdatedAt, got.UpdatedAt)
+	assert.True(t, got.LastLoginAt.Equal(created.LastLoginAt))
+	assert.Equal(t, time.UTC, got.CreatedAt.Location())
+	assert.Equal(t, time.UTC, got.LastLoginAt.Location())
+
+	updated, err := suite.users.UpsertGoogleUser(
+		suite.ctx,
+		domain.GoogleIdentity{
+			Subject:     "google-subject-1",
+			Email:       "admin@example.com",
+			DisplayName: "Admin User",
+			AvatarURL:   "https://example.com/avatar-2.png",
+		},
+		domain.UserRoleAdmin,
+		now.Add(30*time.Minute),
+	)
+	assert.NoError(t, err)
+
+	got, err = suite.users.GetByID(suite.ctx, created.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, created.ID, got.ID)
+	assert.Equal(t, updated.Email, got.Email)
+	assert.Equal(t, "Admin User", got.DisplayName)
+	assert.Equal(t, "https://example.com/avatar-2.png", got.AvatarURL)
+	assert.Equal(t, domain.UserRoleAdmin, got.Role)
+	assert.True(t, got.LastLoginAt.Equal(updated.LastLoginAt))
+}
+
+func (suite *AuthRepositoryTestSuite) TestGetByID_NotFound() {
+	t := suite.T()
+
+	user, err := suite.users.GetByID(suite.ctx, 42)
+	assert.Nil(t, user)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
+}
+
 func (suite *AuthRepositoryTestSuite) TestSessionLifecycle() {
 	t := suite.T()
 	user, err := suite.users.UpsertGoogleUser(

@@ -507,8 +507,9 @@ components:
         Opaque HttpOnly cookie-сессия после Google OAuth.
         Роли: чтение (`GET`) — `user`/`admin`; мутации — только `admin`.
         Mutating запросы (`POST`, `PUT`, `PATCH`, `DELETE`) с cookie-сессией
-        дополнительно требуют CSRF-заголовок `X-CSRF-Token`, совпадающий
-        с CSRF cookie (double-submit).
+        дополнительно требуют CSRF-заголовок `X-CSRF-Token`. Токен выпускается
+        сервером (HMAC от session token и часового timestamp), отдаётся клиенту
+        в CSRF cookie и проверяется по заголовку в окне ±1 час.
 
   headers:
     XRequestID:
@@ -569,7 +570,9 @@ components:
       required: true
       description: |
         CSRF token для mutating запросов с cookie-сессией.
-        Должен совпадать со значением CSRF cookie (double-submit pattern).
+        Выпускается сервером (HMAC от session token и часового timestamp),
+        отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+        Токен принимается в окне ±1 час; cookie обновляется на аутентифицированных запросах.
       schema:
         type: string
         minLength: 1

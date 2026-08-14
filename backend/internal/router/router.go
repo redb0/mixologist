@@ -6,14 +6,18 @@ import (
 	"github.com/gin-contrib/requestid"
 	ginslog "github.com/gin-contrib/slog"
 	"github.com/gin-gonic/gin"
+	"github.com/redb0/mixologist/internal/config"
 	"github.com/redb0/mixologist/internal/handlers"
 	"github.com/redb0/mixologist/internal/middleware"
+	"github.com/redb0/mixologist/internal/services"
 )
 
 type Dependencies struct {
 	HealthController     *handlers.HealthController
 	IngredientController *handlers.IngredientController
 	AuthController       *handlers.AuthController
+	AuthService          services.AuthService
+	AuthConfig           config.AuthConfig
 }
 
 func New(deps Dependencies) *gin.Engine {
@@ -38,8 +42,11 @@ func New(deps Dependencies) *gin.Engine {
 	if deps.AuthController != nil {
 		v1.GET("/auth/google/login", deps.AuthController.StartGoogleLogin)
 		v1.GET("/auth/google/callback", deps.AuthController.HandleGoogleCallback)
-		v1.GET("/auth/me", deps.AuthController.GetCurrentUser)
-		v1.POST("/auth/logout", deps.AuthController.Logout)
+
+		requireAuth := middleware.RequireAuth(deps.AuthService, deps.AuthConfig, nil)
+		requireCSRF := middleware.RequireCSRF(deps.AuthConfig, nil)
+		v1.GET("/auth/me", requireAuth, deps.AuthController.GetCurrentUser)
+		v1.POST("/auth/logout", requireAuth, requireCSRF, deps.AuthController.Logout)
 	}
 	v1.GET("/ingredients", deps.IngredientController.ListIngredients)
 	v1.GET("/ingredients/:id", deps.IngredientController.GetIngredient)

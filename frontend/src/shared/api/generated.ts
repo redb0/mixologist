@@ -450,7 +450,9 @@ export interface components {
         OAuthError: string;
         /**
          * @description CSRF token для mutating запросов с cookie-сессией.
-         *     Должен совпадать со значением CSRF cookie (double-submit pattern).
+         *     Выпускается сервером (HMAC от session token и часового timestamp),
+         *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+         *     Токен принимается в окне ±1 час; cookie обновляется на аутентифицированных запросах.
          */
         CSRFToken: string;
         /** @description Идентификатор ингредиента (положительное целое) */
@@ -639,7 +641,9 @@ export interface operations {
             header: {
                 /**
                  * @description CSRF token для mutating запросов с cookie-сессией.
-                 *     Должен совпадать со значением CSRF cookie (double-submit pattern).
+                 *     Выпускается сервером (HMAC от session token и часового timestamp),
+                 *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+                 *     Токен принимается в окне ±1 час; cookie обновляется на аутентифицированных запросах.
                  */
                 "X-CSRF-Token": components["parameters"]["CSRFToken"];
             };
@@ -736,7 +740,9 @@ export interface operations {
             header: {
                 /**
                  * @description CSRF token для mutating запросов с cookie-сессией.
-                 *     Должен совпадать со значением CSRF cookie (double-submit pattern).
+                 *     Выпускается сервером (HMAC от session token и часового timestamp),
+                 *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+                 *     Токен принимается в окне ±1 час; cookie обновляется на аутентифицированных запросах.
                  */
                 "X-CSRF-Token": components["parameters"]["CSRFToken"];
             };
@@ -803,7 +809,9 @@ export interface operations {
             header: {
                 /**
                  * @description CSRF token для mutating запросов с cookie-сессией.
-                 *     Должен совпадать со значением CSRF cookie (double-submit pattern).
+                 *     Выпускается сервером (HMAC от session token и часового timestamp),
+                 *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+                 *     Токен принимается в окне ±1 час; cookie обновляется на аутентифицированных запросах.
                  */
                 "X-CSRF-Token": components["parameters"]["CSRFToken"];
             };
@@ -838,7 +846,9 @@ export interface operations {
             header: {
                 /**
                  * @description CSRF token для mutating запросов с cookie-сессией.
-                 *     Должен совпадать со значением CSRF cookie (double-submit pattern).
+                 *     Выпускается сервером (HMAC от session token и часового timestamp),
+                 *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+                 *     Токен принимается в окне ±1 час; cookie обновляется на аутентифицированных запросах.
                  */
                 "X-CSRF-Token": components["parameters"]["CSRFToken"];
             };
@@ -914,7 +924,9 @@ export interface operations {
             header: {
                 /**
                  * @description CSRF token для mutating запросов с cookie-сессией.
-                 *     Должен совпадать со значением CSRF cookie (double-submit pattern).
+                 *     Выпускается сервером (HMAC от session token и часового timestamp),
+                 *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+                 *     Токен принимается в окне ±1 час; cookie обновляется на аутентифицированных запросах.
                  */
                 "X-CSRF-Token": components["parameters"]["CSRFToken"];
             };

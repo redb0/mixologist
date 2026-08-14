@@ -28,6 +28,7 @@ func setValidAuthEnv(t *testing.T) {
 	t.Setenv("SESSION_COOKIE_DOMAIN", "")
 	t.Setenv("SESSION_COOKIE_SECURE", "")
 	t.Setenv("SESSION_TTL", "")
+	t.Setenv("CSRF_SECRET", strings.Repeat("b", 32))
 	t.Setenv("CSRF_COOKIE_NAME", "")
 	t.Setenv("CSRF_HEADER_NAME", "")
 }
@@ -44,6 +45,7 @@ func clearAuthEnv(t *testing.T) {
 		"SESSION_COOKIE_DOMAIN",
 		"SESSION_COOKIE_SECURE",
 		"SESSION_TTL",
+		"CSRF_SECRET",
 		"CSRF_COOKIE_NAME",
 		"CSRF_HEADER_NAME",
 	} {
@@ -71,6 +73,7 @@ func TestLoad_success(t *testing.T) {
 	assert.Equal(t, []string{"admin@example.com", "ops@example.com"}, cfg.Auth.AdminEmails)
 	assert.Equal(t, defaultSessionCookieName, cfg.Auth.SessionCookieName)
 	assert.Equal(t, strings.Repeat("a", 32), cfg.Auth.SessionCookieSecret)
+	assert.Equal(t, strings.Repeat("b", 32), cfg.Auth.CSRFSecret)
 	assert.True(t, cfg.Auth.SessionCookieSecure)
 	assert.Equal(t, defaultSessionTTL, cfg.Auth.SessionTTL)
 	assert.Equal(t, defaultCSRFCookieName, cfg.Auth.CSRFCookieName)
@@ -103,6 +106,7 @@ func TestLoad_trimSpace(t *testing.T) {
 	t.Setenv("GOOGLE_OAUTH_CALLBACK_URL", "  http://localhost:8080/api/v1/auth/google/callback  ")
 	t.Setenv("AUTH_ADMIN_EMAILS", "  admin@example.com ,  ops@example.com  ")
 	t.Setenv("SESSION_COOKIE_SECRET", "  "+strings.Repeat("a", 32)+"  ")
+	t.Setenv("CSRF_SECRET", "  "+strings.Repeat("b", 32)+"  ")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -112,6 +116,8 @@ func TestLoad_trimSpace(t *testing.T) {
 	assert.Equal(t, "error", cfg.LogLevel)
 	assert.Equal(t, "google-client-id", cfg.Auth.GoogleClientID)
 	assert.Equal(t, []string{"admin@example.com", "ops@example.com"}, cfg.Auth.AdminEmails)
+	assert.Equal(t, strings.Repeat("a", 32), cfg.Auth.SessionCookieSecret)
+	assert.Equal(t, strings.Repeat("b", 32), cfg.Auth.CSRFSecret)
 }
 
 func TestLoad_errors(t *testing.T) {
@@ -216,6 +222,7 @@ func TestLoad_errors(t *testing.T) {
 				"GOOGLE_OAUTH_CLIENT_SECRET": "secret",
 				"GOOGLE_OAUTH_CALLBACK_URL":  "https://localhost/callback",
 				"SESSION_COOKIE_SECRET":      strings.Repeat("a", 32),
+				"CSRF_SECRET":                strings.Repeat("b", 32),
 				"SESSION_COOKIE_SECURE":      "false",
 			},
 			wantErr: "SESSION_COOKIE_SECURE must be true when GIN_MODE is release",
@@ -243,6 +250,30 @@ func TestLoad_errors(t *testing.T) {
 			wantErr: "SESSION_COOKIE_SECRET must be at least 32 characters",
 		},
 		{
+			name: "missing CSRF_SECRET",
+			env: map[string]string{
+				"DB_URL":                     "postgres://localhost/db",
+				"GOOGLE_OAUTH_CLIENT_ID":     "client-id",
+				"GOOGLE_OAUTH_CLIENT_SECRET": "secret",
+				"GOOGLE_OAUTH_CALLBACK_URL":  "http://localhost/callback",
+				"SESSION_COOKIE_SECRET":      strings.Repeat("a", 32),
+				"CSRF_SECRET":                "",
+			},
+			wantErr: "CSRF_SECRET is required",
+		},
+		{
+			name: "short CSRF_SECRET",
+			env: map[string]string{
+				"DB_URL":                     "postgres://localhost/db",
+				"GOOGLE_OAUTH_CLIENT_ID":     "client-id",
+				"GOOGLE_OAUTH_CLIENT_SECRET": "secret",
+				"GOOGLE_OAUTH_CALLBACK_URL":  "http://localhost/callback",
+				"SESSION_COOKIE_SECRET":      strings.Repeat("a", 32),
+				"CSRF_SECRET":                "too-short",
+			},
+			wantErr: "CSRF_SECRET must be at least 32 characters",
+		},
+		{
 			name: "invalid SESSION_TTL",
 			env: map[string]string{
 				"DB_URL":                     "postgres://localhost/db",
@@ -250,6 +281,7 @@ func TestLoad_errors(t *testing.T) {
 				"GOOGLE_OAUTH_CLIENT_SECRET": "secret",
 				"GOOGLE_OAUTH_CALLBACK_URL":  "http://localhost/callback",
 				"SESSION_COOKIE_SECRET":      strings.Repeat("a", 32),
+				"CSRF_SECRET":                strings.Repeat("b", 32),
 				"SESSION_TTL":                "not-a-duration",
 			},
 			wantErr: "SESSION_TTL must be a positive duration, got \"not-a-duration\"",
@@ -262,6 +294,7 @@ func TestLoad_errors(t *testing.T) {
 				"GOOGLE_OAUTH_CLIENT_SECRET": "secret",
 				"GOOGLE_OAUTH_CALLBACK_URL":  "http://localhost/callback",
 				"SESSION_COOKIE_SECRET":      strings.Repeat("a", 32),
+				"CSRF_SECRET":                strings.Repeat("b", 32),
 				"SESSION_COOKIE_SECURE":      "maybe",
 			},
 			wantErr: "SESSION_COOKIE_SECURE must be true or false, got \"maybe\"",
@@ -274,6 +307,7 @@ func TestLoad_errors(t *testing.T) {
 				"GOOGLE_OAUTH_CLIENT_SECRET": "secret",
 				"GOOGLE_OAUTH_CALLBACK_URL":  "http://localhost/callback",
 				"SESSION_COOKIE_SECRET":      strings.Repeat("a", 32),
+				"CSRF_SECRET":                strings.Repeat("b", 32),
 				"AUTH_ADMIN_EMAILS":          "admin@example.com,,ops@example.com",
 			},
 			wantErr: "AUTH_ADMIN_EMAILS must not contain empty values",
@@ -286,6 +320,7 @@ func TestLoad_errors(t *testing.T) {
 				"GOOGLE_OAUTH_CLIENT_SECRET": "secret",
 				"GOOGLE_OAUTH_CALLBACK_URL":  "http://localhost/callback",
 				"SESSION_COOKIE_SECRET":      strings.Repeat("a", 32),
+				"CSRF_SECRET":                strings.Repeat("b", 32),
 				"AUTH_ADMIN_EMAILS":          "not-an-email",
 			},
 			wantErr: "AUTH_ADMIN_EMAILS contains invalid email \"not-an-email\"",

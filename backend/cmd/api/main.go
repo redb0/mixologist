@@ -88,6 +88,8 @@ func main() {
 		HealthController:     healthController,
 		IngredientController: ingredientController,
 		AuthController:       authController,
+		AuthService:          authService,
+		AuthConfig:           cfg.Auth,
 	})
 
 	if err := app.Run(cfg.HTTPAddr); err != nil {

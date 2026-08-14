@@ -15,6 +15,7 @@ import (
 	"github.com/markbates/goth"
 	"github.com/redb0/mixologist/internal/config"
 	"github.com/redb0/mixologist/internal/domain"
+	"github.com/redb0/mixologist/internal/middleware"
 )
 
 type mockGoogleOAuthClient struct {
@@ -299,6 +300,10 @@ func TestAuthController_HandleGoogleCallback_Success(t *testing.T) {
 	if strings.Contains(csrfCookie, "HttpOnly") {
 		t.Fatalf("csrf cookie must be readable by JS: %q", csrfCookie)
 	}
+	expectedCSRF := middleware.SignCSRFToken(testAuthConfig().CSRFSecret, "session-token", time.Unix(1_700_000_000, 0).UTC())
+	if !strings.Contains(csrfCookie, expectedCSRF) {
+		t.Fatalf("csrf cookie must contain signed token: %q", csrfCookie)
+	}
 
 	oauthCookie := cookieHeader(w, oauthStateCookieName)
 	if oauthCookie == "" || !strings.Contains(oauthCookie, "Max-Age=0") {
@@ -373,10 +378,10 @@ func TestAuthController_HandleGoogleCallback_EmailConflict(t *testing.T) {
 func TestAuthController_GetCurrentUser_UnauthorizedWithoutCookie(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	controller := NewAuthController(&mockAuthService{}, &mockGoogleOAuthClient{}, testAuthConfig())
-	r := gin.New()
-	r.Use(requestid.New())
-	r.GET("/api/v1/auth/me", controller.GetCurrentUser)
+	cfg := testAuthConfig()
+	authService := &mockAuthService{}
+	controller := NewAuthController(authService, &mockGoogleOAuthClient{}, cfg)
+	r := newProtectedAuthEngine(controller, authService, cfg)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
@@ -390,27 +395,23 @@ func TestAuthController_GetCurrentUser_UnauthorizedWithoutCookie(t *testing.T) {
 func TestAuthController_GetCurrentUser_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	controller := NewAuthController(
-		&mockAuthService{
-			getUserBySessionToken: func(ctx context.Context, rawToken string, now time.Time) (*domain.User, error) {
-				return &domain.User{
-					ID:          1,
-					Email:       "user@example.com",
-					DisplayName: "User",
-					Role:        domain.UserRoleAdmin,
-				}, nil
-			},
+	cfg := testAuthConfig()
+	authService := &mockAuthService{
+		getUserBySessionToken: func(ctx context.Context, rawToken string, now time.Time) (*domain.User, error) {
+			return &domain.User{
+				ID:          1,
+				Email:       "user@example.com",
+				DisplayName: "User",
+				Role:        domain.UserRoleAdmin,
+			}, nil
 		},
-		&mockGoogleOAuthClient{},
-		testAuthConfig(),
-	)
-	r := gin.New()
-	r.Use(requestid.New())
-	r.GET("/api/v1/auth/me", controller.GetCurrentUser)
+	}
+	controller := NewAuthController(authService, &mockGoogleOAuthClient{}, cfg)
+	r := newProtectedAuthEngine(controller, authService, cfg)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
-	req.AddCookie(&http.Cookie{Name: testAuthConfig().SessionCookieName, Value: "session-token"})
+	req.AddCookie(&http.Cookie{Name: cfg.SessionCookieName, Value: "session-token"})
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -428,22 +429,18 @@ func TestAuthController_GetCurrentUser_Success(t *testing.T) {
 func TestAuthController_GetCurrentUser_InvalidSession(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	controller := NewAuthController(
-		&mockAuthService{
-			getUserBySessionToken: func(ctx context.Context, rawToken string, now time.Time) (*domain.User, error) {
-				return nil, domain.NewErrUnauthorized("сессия недействительна")
-			},
+	cfg := testAuthConfig()
+	authService := &mockAuthService{
+		getUserBySessionToken: func(ctx context.Context, rawToken string, now time.Time) (*domain.User, error) {
+			return nil, domain.NewErrUnauthorized("сессия недействительна")
 		},
-		&mockGoogleOAuthClient{},
-		testAuthConfig(),
-	)
-	r := gin.New()
-	r.Use(requestid.New())
-	r.GET("/api/v1/auth/me", controller.GetCurrentUser)
+	}
+	controller := NewAuthController(authService, &mockGoogleOAuthClient{}, cfg)
+	r := newProtectedAuthEngine(controller, authService, cfg)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
-	req.AddCookie(&http.Cookie{Name: testAuthConfig().SessionCookieName, Value: "stale-token"})
+	req.AddCookie(&http.Cookie{Name: cfg.SessionCookieName, Value: "stale-token"})
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusUnauthorized {
@@ -454,26 +451,22 @@ func TestAuthController_GetCurrentUser_InvalidSession(t *testing.T) {
 func TestAuthController_Logout(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
+	cfg := testAuthConfig()
 	calledRevoke := false
-	controller := NewAuthController(
-		&mockAuthService{
-			revokeSessionByRawToken: func(ctx context.Context, rawToken string, now time.Time) error {
-				calledRevoke = true
-				return nil
-			},
+	authService := &mockAuthService{
+		getUserBySessionToken: authenticatedUserLookup(),
+		revokeSessionByRawToken: func(ctx context.Context, rawToken string, now time.Time) error {
+			calledRevoke = true
+			return nil
 		},
-		&mockGoogleOAuthClient{},
-		testAuthConfig(),
-	)
-	r := gin.New()
-	r.Use(requestid.New())
-	r.POST("/api/v1/auth/logout", controller.Logout)
+	}
+	controller := NewAuthController(authService, &mockGoogleOAuthClient{}, cfg)
+	r := newProtectedAuthEngine(controller, authService, cfg)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
-	req.AddCookie(&http.Cookie{Name: testAuthConfig().SessionCookieName, Value: "session-token"})
-	req.AddCookie(&http.Cookie{Name: testAuthConfig().CSRFCookieName, Value: "csrf-token"})
-	req.Header.Set(testAuthConfig().CSRFHeaderName, "csrf-token")
+	req.AddCookie(&http.Cookie{Name: cfg.SessionCookieName, Value: "session-token"})
+	req.Header.Set(cfg.CSRFHeaderName, signedCSRF(cfg, "session-token"))
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusNoContent {
@@ -483,7 +476,7 @@ func TestAuthController_Logout(t *testing.T) {
 		t.Fatal("RevokeSessionByRawToken was not called")
 	}
 	setCookie := strings.Join(w.Header().Values("Set-Cookie"), ";")
-	if !strings.Contains(setCookie, testAuthConfig().SessionCookieName+"=") ||
+	if !strings.Contains(setCookie, cfg.SessionCookieName+"=") ||
 		!strings.Contains(setCookie, "Max-Age=0") {
 		t.Fatalf("session cookie must be cleared: %q", setCookie)
 	}
@@ -492,19 +485,15 @@ func TestAuthController_Logout(t *testing.T) {
 func TestAuthController_Logout_UnauthorizedWithoutCookie(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	controller := NewAuthController(
-		&mockAuthService{
-			revokeSessionByRawToken: func(ctx context.Context, rawToken string, now time.Time) error {
-				t.Fatal("RevokeSessionByRawToken must not be called")
-				return nil
-			},
+	cfg := testAuthConfig()
+	authService := &mockAuthService{
+		revokeSessionByRawToken: func(ctx context.Context, rawToken string, now time.Time) error {
+			t.Fatal("RevokeSessionByRawToken must not be called")
+			return nil
 		},
-		&mockGoogleOAuthClient{},
-		testAuthConfig(),
-	)
-	r := gin.New()
-	r.Use(requestid.New())
-	r.POST("/api/v1/auth/logout", controller.Logout)
+	}
+	controller := NewAuthController(authService, &mockGoogleOAuthClient{}, cfg)
+	r := newProtectedAuthEngine(controller, authService, cfg)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
@@ -515,61 +504,85 @@ func TestAuthController_Logout_UnauthorizedWithoutCookie(t *testing.T) {
 	}
 }
 
-func TestAuthController_Logout_MissingCSRFCookie(t *testing.T) {
+func TestAuthController_Logout_MissingCSRFHeader(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
+	cfg := testAuthConfig()
 	calledRevoke := false
-	controller := NewAuthController(
-		&mockAuthService{
-			revokeSessionByRawToken: func(ctx context.Context, rawToken string, now time.Time) error {
-				calledRevoke = true
-				return nil
-			},
+	authService := &mockAuthService{
+		getUserBySessionToken: authenticatedUserLookup(),
+		revokeSessionByRawToken: func(ctx context.Context, rawToken string, now time.Time) error {
+			calledRevoke = true
+			return nil
 		},
-		&mockGoogleOAuthClient{},
-		testAuthConfig(),
-	)
-	r := gin.New()
-	r.Use(requestid.New())
-	r.POST("/api/v1/auth/logout", controller.Logout)
+	}
+	controller := NewAuthController(authService, &mockGoogleOAuthClient{}, cfg)
+	r := newProtectedAuthEngine(controller, authService, cfg)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
-	req.AddCookie(&http.Cookie{Name: testAuthConfig().SessionCookieName, Value: "session-token"})
-	req.Header.Set(testAuthConfig().CSRFHeaderName, "csrf-token")
+	req.AddCookie(&http.Cookie{Name: cfg.SessionCookieName, Value: "session-token"})
+	req.AddCookie(&http.Cookie{Name: cfg.CSRFCookieName, Value: signedCSRF(cfg, "session-token")})
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("unexpected status: %d", w.Code)
 	}
 	if calledRevoke {
-		t.Fatal("RevokeSessionByRawToken must not be called when CSRF cookie is missing")
+		t.Fatal("RevokeSessionByRawToken must not be called when CSRF header is missing")
+	}
+}
+
+func TestAuthController_Logout_ForgedMatchingCookieAndHeader(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := testAuthConfig()
+	calledRevoke := false
+	authService := &mockAuthService{
+		getUserBySessionToken: authenticatedUserLookup(),
+		revokeSessionByRawToken: func(ctx context.Context, rawToken string, now time.Time) error {
+			calledRevoke = true
+			return nil
+		},
+	}
+	controller := NewAuthController(authService, &mockGoogleOAuthClient{}, cfg)
+	r := newProtectedAuthEngine(controller, authService, cfg)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	req.AddCookie(&http.Cookie{Name: cfg.SessionCookieName, Value: "session-token"})
+	req.AddCookie(&http.Cookie{Name: cfg.CSRFCookieName, Value: "csrf-token"})
+	req.Header.Set(cfg.CSRFHeaderName, "csrf-token")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("unexpected status: %d", w.Code)
+	}
+	if calledRevoke {
+		t.Fatal("RevokeSessionByRawToken must not be called for client-forged CSRF")
 	}
 }
 
 func TestAuthController_Logout_InvalidCSRF(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
+	cfg := testAuthConfig()
 	calledRevoke := false
-	controller := NewAuthController(
-		&mockAuthService{
-			revokeSessionByRawToken: func(ctx context.Context, rawToken string, now time.Time) error {
-				calledRevoke = true
-				return nil
-			},
+	authService := &mockAuthService{
+		getUserBySessionToken: authenticatedUserLookup(),
+		revokeSessionByRawToken: func(ctx context.Context, rawToken string, now time.Time) error {
+			calledRevoke = true
+			return nil
 		},
-		&mockGoogleOAuthClient{},
-		testAuthConfig(),
-	)
-	r := gin.New()
-	r.Use(requestid.New())
-	r.POST("/api/v1/auth/logout", controller.Logout)
+	}
+	controller := NewAuthController(authService, &mockGoogleOAuthClient{}, cfg)
+	r := newProtectedAuthEngine(controller, authService, cfg)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
-	req.AddCookie(&http.Cookie{Name: testAuthConfig().SessionCookieName, Value: "session-token"})
-	req.AddCookie(&http.Cookie{Name: testAuthConfig().CSRFCookieName, Value: "csrf-token"})
-	req.Header.Set(testAuthConfig().CSRFHeaderName, "other-token")
+	req.AddCookie(&http.Cookie{Name: cfg.SessionCookieName, Value: "session-token"})
+	req.AddCookie(&http.Cookie{Name: cfg.CSRFCookieName, Value: "csrf-token"})
+	req.Header.Set(cfg.CSRFHeaderName, "other-token")
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusForbidden {
@@ -590,24 +603,20 @@ func TestAuthController_Logout_InvalidCSRF(t *testing.T) {
 func TestAuthController_Logout_RevokeErrorClearsCookies(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	controller := NewAuthController(
-		&mockAuthService{
-			revokeSessionByRawToken: func(ctx context.Context, rawToken string, now time.Time) error {
-				return domain.NewErrUnauthorized("сессия недействительна")
-			},
+	cfg := testAuthConfig()
+	authService := &mockAuthService{
+		getUserBySessionToken: authenticatedUserLookup(),
+		revokeSessionByRawToken: func(ctx context.Context, rawToken string, now time.Time) error {
+			return domain.NewErrUnauthorized("сессия недействительна")
 		},
-		&mockGoogleOAuthClient{},
-		testAuthConfig(),
-	)
-	r := gin.New()
-	r.Use(requestid.New())
-	r.POST("/api/v1/auth/logout", controller.Logout)
+	}
+	controller := NewAuthController(authService, &mockGoogleOAuthClient{}, cfg)
+	r := newProtectedAuthEngine(controller, authService, cfg)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
-	req.AddCookie(&http.Cookie{Name: testAuthConfig().SessionCookieName, Value: "session-token"})
-	req.AddCookie(&http.Cookie{Name: testAuthConfig().CSRFCookieName, Value: "csrf-token"})
-	req.Header.Set(testAuthConfig().CSRFHeaderName, "csrf-token")
+	req.AddCookie(&http.Cookie{Name: cfg.SessionCookieName, Value: "session-token"})
+	req.Header.Set(cfg.CSRFHeaderName, signedCSRF(cfg, "session-token"))
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusUnauthorized {
@@ -615,12 +624,44 @@ func TestAuthController_Logout_RevokeErrorClearsCookies(t *testing.T) {
 	}
 
 	setCookie := strings.Join(w.Header().Values("Set-Cookie"), ";")
-	if !strings.Contains(setCookie, testAuthConfig().SessionCookieName+"=") {
+	if !strings.Contains(setCookie, cfg.SessionCookieName+"=") {
 		t.Fatalf("session cookie should be cleared: %q", setCookie)
 	}
-	if !strings.Contains(setCookie, testAuthConfig().CSRFCookieName+"=") {
+	if !strings.Contains(setCookie, cfg.CSRFCookieName+"=") {
 		t.Fatalf("csrf cookie should be cleared: %q", setCookie)
 	}
+}
+
+func authenticatedUserLookup() func(ctx context.Context, rawToken string, now time.Time) (*domain.User, error) {
+	return func(ctx context.Context, rawToken string, now time.Time) (*domain.User, error) {
+		return &domain.User{
+			ID:          1,
+			Email:       "user@example.com",
+			DisplayName: "User",
+			Role:        domain.UserRoleUser,
+		}, nil
+	}
+}
+
+func testNow() time.Time {
+	return time.Unix(1_700_000_000, 0).UTC()
+}
+
+func signedCSRF(cfg config.AuthConfig, sessionToken string) string {
+	return middleware.SignCSRFToken(cfg.CSRFSecret, sessionToken, testNow())
+}
+
+func newProtectedAuthEngine(
+	controller *AuthController,
+	lookup middleware.SessionUserLookup,
+	cfg config.AuthConfig,
+) *gin.Engine {
+	r := gin.New()
+	r.Use(requestid.New())
+	requireAuth := middleware.RequireAuth(lookup, cfg, testNow)
+	r.GET("/api/v1/auth/me", requireAuth, controller.GetCurrentUser)
+	r.POST("/api/v1/auth/logout", requireAuth, middleware.RequireCSRF(cfg, testNow), controller.Logout)
+	return r
 }
 
 func TestAuthController_StartGoogleLogin_InvalidReturnTo(t *testing.T) {
@@ -1203,6 +1244,7 @@ func testAuthConfig() config.AuthConfig {
 		SessionCookieDomain: "",
 		SessionCookieSecure: false,
 		SessionTTL:          24 * time.Hour,
+		CSRFSecret:          strings.Repeat("b", 32),
 		CSRFCookieName:      "csrf_token",
 		CSRFHeaderName:      "X-CSRF-Token",
 	}

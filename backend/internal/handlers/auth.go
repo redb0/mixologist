@@ -23,6 +23,7 @@ import (
 
 	"github.com/redb0/mixologist/internal/config"
 	"github.com/redb0/mixologist/internal/domain"
+	"github.com/redb0/mixologist/internal/middleware"
 	"github.com/redb0/mixologist/internal/services"
 )
 
@@ -282,27 +283,16 @@ func (c *AuthController) HandleGoogleCallback(ctx *gin.Context) {
 		return
 	}
 
-	csrfToken, err := randomToken(32)
-	if err != nil {
-		RespondError(ctx, domain.NewErrServiceUnavailable("не удалось создать csrf token"))
-		return
-	}
-
 	c.setSessionCookie(ctx, sessionToken, int(c.authConfig.SessionTTL.Seconds()))
-	c.setCSRFCookie(ctx, csrfToken, int(c.authConfig.SessionTTL.Seconds()))
+	middleware.SetCSRFCookie(ctx, c.authConfig, sessionToken, c.now().UTC())
 	c.clearCookie(ctx, oauthStateCookieName, true)
 	ctx.Redirect(http.StatusFound, statePayload.ReturnTo)
 }
 
 func (c *AuthController) GetCurrentUser(ctx *gin.Context) {
-	rawToken, err := ctx.Cookie(c.authConfig.SessionCookieName)
-	if err != nil {
+	user, ok := middleware.CurrentUser(ctx)
+	if !ok {
 		RespondError(ctx, domain.NewErrUnauthorized("требуется аутентификация"))
-		return
-	}
-	user, err := c.authService.GetUserBySessionToken(ctx.Request.Context(), rawToken, c.now().UTC())
-	if err != nil {
-		RespondError(ctx, err)
 		return
 	}
 
@@ -322,10 +312,6 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 		return
 	}
 
-	if !c.validateCSRFToken(ctx) {
-		return
-	}
-
 	if err = c.authService.RevokeSessionByRawToken(ctx.Request.Context(), rawToken, c.now().UTC()); err != nil {
 		// Даже при ошибке отзыва очищаем client-side cookies, чтобы клиент не зацикливался
 		// на отправке заведомо невалидной сессии.
@@ -340,18 +326,6 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 	ctx.Status(http.StatusNoContent)
 }
 
-func (c *AuthController) validateCSRFToken(ctx *gin.Context) bool {
-	headerToken := strings.TrimSpace(ctx.GetHeader(c.authConfig.CSRFHeaderName))
-	cookieToken, err := ctx.Cookie(c.authConfig.CSRFCookieName)
-	if err != nil ||
-		headerToken == "" ||
-		!hmac.Equal([]byte(headerToken), []byte(cookieToken)) {
-		respondAuthFlowError(ctx, http.StatusForbidden, CodeCSRFTokenInvalid, "Некорректный CSRF token")
-		return false
-	}
-	return true
-}
-
 func (c *AuthController) setSessionCookie(ctx *gin.Context, value string, maxAge int) {
 	ctx.SetSameSite(http.SameSiteLaxMode)
 	ctx.SetCookie(
@@ -362,19 +336,6 @@ func (c *AuthController) setSessionCookie(ctx *gin.Context, value string, maxAge
 		c.authConfig.SessionCookieDomain,
 		c.authConfig.SessionCookieSecure,
 		true,
-	)
-}
-
-func (c *AuthController) setCSRFCookie(ctx *gin.Context, value string, maxAge int) {
-	ctx.SetSameSite(http.SameSiteLaxMode)
-	ctx.SetCookie(
-		c.authConfig.CSRFCookieName,
-		value,
-		maxAge,
-		"/",
-		c.authConfig.SessionCookieDomain,
-		c.authConfig.SessionCookieSecure,
-		false,
 	)
 }
 

@@ -11,12 +11,12 @@ import (
 )
 
 const (
-	minSessionCookieSecretLen = 32
-	defaultSessionCookieName  = "session"
-	defaultSessionTTLRaw      = "168h"
-	defaultSessionTTL         = 168 * time.Hour
-	defaultCSRFCookieName     = "csrf_token"
-	defaultCSRFHeaderName     = "X-CSRF-Token"
+	minAuthSecretLen         = 32
+	defaultSessionCookieName = "session"
+	defaultSessionTTLRaw     = "168h"
+	defaultSessionTTL        = 168 * time.Hour
+	defaultCSRFCookieName    = "csrf_token"
+	defaultCSRFHeaderName    = "X-CSRF-Token"
 )
 
 type Config struct {
@@ -37,6 +37,7 @@ type AuthConfig struct {
 	SessionCookieDomain string
 	SessionCookieSecure bool
 	SessionTTL          time.Duration
+	CSRFSecret          string
 	CSRFCookieName      string
 	CSRFHeaderName      string
 }
@@ -96,6 +97,7 @@ func loadAuthConfig(ginMode string) (AuthConfig, error) {
 		SessionCookieName:   envOrDefault("SESSION_COOKIE_NAME", defaultSessionCookieName),
 		SessionCookieSecret: strings.TrimSpace(os.Getenv("SESSION_COOKIE_SECRET")),
 		SessionCookieDomain: strings.TrimSpace(os.Getenv("SESSION_COOKIE_DOMAIN")),
+		CSRFSecret:          strings.TrimSpace(os.Getenv("CSRF_SECRET")),
 		CSRFCookieName:      envOrDefault("CSRF_COOKIE_NAME", defaultCSRFCookieName),
 		CSRFHeaderName:      envOrDefault("CSRF_HEADER_NAME", defaultCSRFHeaderName),
 	}
@@ -131,14 +133,11 @@ func loadAuthConfig(ginMode string) (AuthConfig, error) {
 		)
 	}
 
-	if cfg.SessionCookieSecret == "" {
-		return AuthConfig{}, errors.New("SESSION_COOKIE_SECRET is required")
+	if err := requireSecret("SESSION_COOKIE_SECRET", cfg.SessionCookieSecret); err != nil {
+		return AuthConfig{}, err
 	}
-	if len(cfg.SessionCookieSecret) < minSessionCookieSecretLen {
-		return AuthConfig{}, fmt.Errorf(
-			"SESSION_COOKIE_SECRET must be at least %d characters",
-			minSessionCookieSecretLen,
-		)
+	if err := requireSecret("CSRF_SECRET", cfg.CSRFSecret); err != nil {
+		return AuthConfig{}, err
 	}
 
 	sessionTTLRaw := envOrDefault("SESSION_TTL", defaultSessionTTLRaw)
@@ -215,6 +214,16 @@ func parseAdminEmails(raw string) ([]string, error) {
 	}
 
 	return emails, nil
+}
+
+func requireSecret(name, value string) error {
+	if value == "" {
+		return fmt.Errorf("%s is required", name)
+	}
+	if len(value) < minAuthSecretLen {
+		return fmt.Errorf("%s must be at least %d characters", name, minAuthSecretLen)
+	}
+	return nil
 }
 
 func envOrDefault(key, fallback string) string {

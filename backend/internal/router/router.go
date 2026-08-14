@@ -1,7 +1,9 @@
 package router
 
 import (
+	"fmt"
 	"log/slog"
+	"reflect"
 	"strings"
 
 	"github.com/gin-contrib/requestid"
@@ -77,10 +79,32 @@ func validateDependencies(deps Dependencies) {
 	if strings.TrimSpace(deps.AuthConfig.CSRFHeaderName) == "" {
 		panic("router dependency AuthConfig.CSRFHeaderName is required")
 	}
+
+	const minAuthSecretLen = 32
+	if strings.TrimSpace(deps.AuthConfig.CSRFSecret) == "" {
+		panic("router dependency AuthConfig.CSRFSecret is required")
+	}
+	if len(deps.AuthConfig.CSRFSecret) < minAuthSecretLen {
+		panic(fmt.Sprintf("router dependency AuthConfig.CSRFSecret must be at least %d characters", minAuthSecretLen))
+	}
+	if strings.TrimSpace(deps.AuthConfig.SessionCookieSecret) == "" {
+		panic("router dependency AuthConfig.SessionCookieSecret is required")
+	}
+	if len(deps.AuthConfig.SessionCookieSecret) < minAuthSecretLen {
+		panic(fmt.Sprintf("router dependency AuthConfig.SessionCookieSecret must be at least %d characters", minAuthSecretLen))
+	}
 }
 
 func mustNotBeNil(name string, dep any) {
 	if dep == nil {
 		panic("router dependency " + name + " is required")
+	}
+
+	v := reflect.ValueOf(dep)
+	k := v.Kind()
+	if k == reflect.Pointer || k == reflect.Interface || k == reflect.Map || k == reflect.Slice || k == reflect.Chan || k == reflect.Func {
+		if v.IsNil() {
+			panic("router dependency " + name + " is required")
+		}
 	}
 }

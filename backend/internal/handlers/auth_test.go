@@ -12,15 +12,15 @@ import (
 
 	"github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
-	"github.com/markbates/goth"
 	"github.com/redb0/mixologist/internal/config"
 	"github.com/redb0/mixologist/internal/domain"
+	"github.com/redb0/mixologist/internal/httperr"
 	"github.com/redb0/mixologist/internal/middleware"
 )
 
 type mockGoogleOAuthClient struct {
 	beginAuth    func(state string, nonce string) (authURL string, sessionData string, err error)
-	completeAuth func(ctx context.Context, sessionData string, code string) (goth.User, error)
+	completeAuth func(ctx context.Context, sessionData string, code string) (idToken string, err error)
 }
 
 func (m *mockGoogleOAuthClient) BeginAuth(state string, nonce string) (string, string, error) {
@@ -30,35 +30,32 @@ func (m *mockGoogleOAuthClient) BeginAuth(state string, nonce string) (string, s
 	return m.beginAuth(state, nonce)
 }
 
-func (m *mockGoogleOAuthClient) CompleteAuth(ctx context.Context, sessionData string, code string) (goth.User, error) {
+func (m *mockGoogleOAuthClient) CompleteAuth(ctx context.Context, sessionData string, code string) (string, error) {
 	if m.completeAuth == nil {
 		panic("unexpected call to CompleteAuth")
 	}
 	return m.completeAuth(ctx, sessionData, code)
 }
 
-type mockGoogleIDTokenValidator struct {
-	validate func(ctx context.Context, idToken string, audience string) (googleIDTokenClaims, error)
-}
-
-func (m *mockGoogleIDTokenValidator) Validate(
-	ctx context.Context,
-	idToken string,
-	audience string,
-) (googleIDTokenClaims, error) {
-	if m.validate == nil {
-		panic("unexpected call to Validate")
-	}
-	return m.validate(ctx, idToken, audience)
-}
-
 type mockAuthService struct {
+	googleIdentityFromIDToken   func(ctx context.Context, rawIDToken string, expectedNonce string) (domain.GoogleIdentity, error)
 	upsertGoogleUser            func(ctx context.Context, identity domain.GoogleIdentity, loginAt time.Time) (*domain.User, error)
 	createSession               func(ctx context.Context, userID uint, ttl time.Duration, now time.Time, metadata map[string]any) (string, *domain.Session, error)
 	getActiveSessionByRawToken  func(ctx context.Context, rawToken string, now time.Time) (*domain.Session, error)
 	getUserBySessionToken       func(ctx context.Context, rawToken string, now time.Time) (*domain.User, error)
 	revokeSessionByRawToken     func(ctx context.Context, rawToken string, now time.Time) error
 	cleanupExpiredOrRevokedFunc func(ctx context.Context, now time.Time) (int64, error)
+}
+
+func (m *mockAuthService) GoogleIdentityFromIDToken(
+	ctx context.Context,
+	rawIDToken string,
+	expectedNonce string,
+) (domain.GoogleIdentity, error) {
+	if m.googleIdentityFromIDToken == nil {
+		panic("unexpected call to GoogleIdentityFromIDToken")
+	}
+	return m.googleIdentityFromIDToken(ctx, rawIDToken, expectedNonce)
 }
 
 func (m *mockAuthService) UpsertGoogleUser(
@@ -195,7 +192,7 @@ func TestAuthController_HandleGoogleCallback_StateValidation(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status: %d", w.Code)
 	}
-	var response ErrorResponse
+	var response httperr.ErrorResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
@@ -210,6 +207,17 @@ func TestAuthController_HandleGoogleCallback_Success(t *testing.T) {
 	calledCreateSession := false
 	controller := NewAuthController(
 		&mockAuthService{
+			googleIdentityFromIDToken: func(ctx context.Context, rawIDToken string, expectedNonce string) (domain.GoogleIdentity, error) {
+				if rawIDToken != "signed-id-token" || expectedNonce != "nonce-1" {
+					t.Fatalf("unexpected token/nonce: %q / %q", rawIDToken, expectedNonce)
+				}
+				return domain.GoogleIdentity{
+					Subject:     "subject-1",
+					Email:       "user@example.com",
+					DisplayName: "Test User",
+					AvatarURL:   "https://example.com/avatar.jpg",
+				}, nil
+			},
 			upsertGoogleUser: func(ctx context.Context, identity domain.GoogleIdentity, loginAt time.Time) (*domain.User, error) {
 				return &domain.User{ID: 1, Email: identity.Email, Role: domain.UserRoleUser}, nil
 			},
@@ -226,34 +234,13 @@ func TestAuthController_HandleGoogleCallback_Success(t *testing.T) {
 		},
 		&mockGoogleOAuthClient{
 			beginAuth: func(state string, nonce string) (string, string, error) { return "", "", nil },
-			completeAuth: func(ctx context.Context, sessionData string, code string) (goth.User, error) {
-				return goth.User{
-					IDToken:   "signed-id-token",
-					UserID:    "subject-1",
-					Email:     "user@example.com",
-					Name:      "Test User",
-					AvatarURL: "https://example.com/avatar.jpg",
-				}, nil
+			completeAuth: func(ctx context.Context, sessionData string, code string) (string, error) {
+				return "signed-id-token", nil
 			},
 		},
 		testAuthConfig(),
 	)
 	controller.now = func() time.Time { return time.Unix(1700000000, 0).UTC() }
-	controller.idTokenValidator = &mockGoogleIDTokenValidator{
-		validate: func(ctx context.Context, idToken string, audience string) (googleIDTokenClaims, error) {
-			if idToken != "signed-id-token" {
-				t.Fatalf("unexpected id token: %q", idToken)
-			}
-			if audience != "google-client-id" {
-				t.Fatalf("unexpected audience: %q", audience)
-			}
-			return googleIDTokenClaims{
-				Subject:       "subject-1",
-				Nonce:         "nonce-1",
-				EmailVerified: true,
-			}, nil
-		},
-	}
 
 	cookieValue, err := buildOAuthStateCookie(oauthStatePayload{
 		State:        "state-1",
@@ -316,32 +303,25 @@ func TestAuthController_HandleGoogleCallback_EmailConflict(t *testing.T) {
 
 	controller := NewAuthController(
 		&mockAuthService{
+			googleIdentityFromIDToken: func(ctx context.Context, rawIDToken string, expectedNonce string) (domain.GoogleIdentity, error) {
+				return domain.GoogleIdentity{
+					Subject:     "subject-1",
+					Email:       "user@example.com",
+					DisplayName: "Test User",
+				}, nil
+			},
 			upsertGoogleUser: func(ctx context.Context, identity domain.GoogleIdentity, loginAt time.Time) (*domain.User, error) {
 				return nil, domain.NewErrAlreadyExists("email уже используется")
 			},
 		},
 		&mockGoogleOAuthClient{
-			completeAuth: func(ctx context.Context, sessionData string, code string) (goth.User, error) {
-				return goth.User{
-					IDToken: "signed-id-token",
-					UserID:  "subject-1",
-					Email:   "user@example.com",
-					Name:    "Test User",
-				}, nil
+			completeAuth: func(ctx context.Context, sessionData string, code string) (string, error) {
+				return "signed-id-token", nil
 			},
 		},
 		testAuthConfig(),
 	)
 	controller.now = func() time.Time { return time.Unix(1700000000, 0).UTC() }
-	controller.idTokenValidator = &mockGoogleIDTokenValidator{
-		validate: func(ctx context.Context, idToken string, audience string) (googleIDTokenClaims, error) {
-			return googleIDTokenClaims{
-				Subject:       "subject-1",
-				Nonce:         "nonce-1",
-				EmailVerified: true,
-			}, nil
-		},
-	}
 
 	cookieValue, err := buildOAuthStateCookie(oauthStatePayload{
 		State:        "state-1",
@@ -366,7 +346,7 @@ func TestAuthController_HandleGoogleCallback_EmailConflict(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status: %d", w.Code)
 	}
-	var response ErrorResponse
+	var response httperr.ErrorResponse
 	if err = json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
@@ -591,11 +571,11 @@ func TestAuthController_Logout_InvalidCSRF(t *testing.T) {
 	if calledRevoke {
 		t.Fatal("RevokeSessionByRawToken must not be called when CSRF is invalid")
 	}
-	var response ErrorResponse
+	var response httperr.ErrorResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
-	if response.Error.Code != CodeCSRFTokenInvalid {
+	if response.Error.Code != httperr.CodeCSRFTokenInvalid {
 		t.Fatalf("unexpected error code: %s", response.Error.Code)
 	}
 }
@@ -679,11 +659,11 @@ func TestAuthController_StartGoogleLogin_InvalidReturnTo(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status: %d", w.Code)
 	}
-	var response ErrorResponse
+	var response httperr.ErrorResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
-	if response.Error.Code != CodeValidationError {
+	if response.Error.Code != httperr.CodeValidationError {
 		t.Fatalf("unexpected error code: %s", response.Error.Code)
 	}
 }
@@ -776,12 +756,12 @@ func TestAuthController_HandleGoogleCallback_ErrorCases(t *testing.T) {
 			controller := NewAuthController(
 				&mockAuthService{},
 				&mockGoogleOAuthClient{
-					completeAuth: func(ctx context.Context, sessionData string, code string) (goth.User, error) {
+					completeAuth: func(ctx context.Context, sessionData string, code string) (string, error) {
 						if tt.oauthErr != nil {
-							return goth.User{}, tt.oauthErr
+							return "", tt.oauthErr
 						}
 						t.Fatal("CompleteAuth must not be called")
-						return goth.User{}, nil
+						return "", nil
 					},
 				},
 				testAuthConfig(),
@@ -802,7 +782,7 @@ func TestAuthController_HandleGoogleCallback_ErrorCases(t *testing.T) {
 			if w.Code != tt.wantStatus {
 				t.Fatalf("unexpected status: %d", w.Code)
 			}
-			var response ErrorResponse
+			var response httperr.ErrorResponse
 			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 				t.Fatalf("decode error response: %v", err)
 			}
@@ -818,33 +798,22 @@ func TestAuthController_HandleGoogleCallback_InvalidIdentity(t *testing.T) {
 
 	controller := NewAuthController(
 		&mockAuthService{
+			googleIdentityFromIDToken: func(ctx context.Context, rawIDToken string, expectedNonce string) (domain.GoogleIdentity, error) {
+				return domain.GoogleIdentity{}, domain.NewErrUnauthorized("невалидный identity token")
+			},
 			upsertGoogleUser: func(ctx context.Context, identity domain.GoogleIdentity, loginAt time.Time) (*domain.User, error) {
 				t.Fatal("UpsertGoogleUser must not be called")
 				return nil, nil
 			},
 		},
 		&mockGoogleOAuthClient{
-			completeAuth: func(ctx context.Context, sessionData string, code string) (goth.User, error) {
-				return goth.User{
-					IDToken: "signed-id-token",
-					UserID:  "subject-1",
-					Email:   "user@example.com",
-					Name:    "Test User",
-				}, nil
+			completeAuth: func(ctx context.Context, sessionData string, code string) (string, error) {
+				return "signed-id-token", nil
 			},
 		},
 		testAuthConfig(),
 	)
 	controller.now = func() time.Time { return time.Unix(1700000000, 0).UTC() }
-	controller.idTokenValidator = &mockGoogleIDTokenValidator{
-		validate: func(ctx context.Context, idToken string, audience string) (googleIDTokenClaims, error) {
-			return googleIDTokenClaims{
-				Subject:       "subject-1",
-				Nonce:         "other-nonce",
-				EmailVerified: true,
-			}, nil
-		},
-	}
 
 	cookieValue, err := buildOAuthStateCookie(oauthStatePayload{
 		State:        "state-1",
@@ -871,11 +840,72 @@ func TestAuthController_HandleGoogleCallback_InvalidIdentity(t *testing.T) {
 	}
 }
 
+func TestAuthController_HandleGoogleCallback_IdentityValidatorUnavailable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	controller := NewAuthController(
+		&mockAuthService{
+			googleIdentityFromIDToken: func(ctx context.Context, rawIDToken string, expectedNonce string) (domain.GoogleIdentity, error) {
+				return domain.GoogleIdentity{}, domain.NewErrServiceUnavailable("не удалось проверить identity token")
+			},
+			upsertGoogleUser: func(ctx context.Context, identity domain.GoogleIdentity, loginAt time.Time) (*domain.User, error) {
+				t.Fatal("UpsertGoogleUser must not be called")
+				return nil, nil
+			},
+		},
+		&mockGoogleOAuthClient{
+			completeAuth: func(ctx context.Context, sessionData string, code string) (string, error) {
+				return "signed-id-token", nil
+			},
+		},
+		testAuthConfig(),
+	)
+	controller.now = func() time.Time { return time.Unix(1700000000, 0).UTC() }
+
+	cookieValue, err := buildOAuthStateCookie(oauthStatePayload{
+		State:        "state-1",
+		Nonce:        "nonce-1",
+		ReturnTo:     "/ingredients",
+		OAuthSession: "oauth-session",
+		ExpiresAt:    controller.now().Add(oauthStateTTL).Unix(),
+	}, testAuthConfig().SessionCookieSecret)
+	if err != nil {
+		t.Fatalf("build oauth state cookie: %v", err)
+	}
+
+	r := gin.New()
+	r.Use(requestid.New())
+	r.GET("/api/v1/auth/google/callback", controller.HandleGoogleCallback)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/google/callback?code=ok&state=state-1", nil)
+	req.AddCookie(&http.Cookie{Name: oauthStateCookieName, Value: cookieValue})
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unexpected status: %d", w.Code)
+	}
+	var response httperr.ErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if response.Error.Code != httperr.CodeServiceUnavailable {
+		t.Fatalf("unexpected error code: %s", response.Error.Code)
+	}
+}
+
 func TestAuthController_HandleGoogleCallback_CreateSessionError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	controller := NewAuthController(
 		&mockAuthService{
+			googleIdentityFromIDToken: func(ctx context.Context, rawIDToken string, expectedNonce string) (domain.GoogleIdentity, error) {
+				return domain.GoogleIdentity{
+					Subject:     "subject-1",
+					Email:       "user@example.com",
+					DisplayName: "Test User",
+				}, nil
+			},
 			upsertGoogleUser: func(ctx context.Context, identity domain.GoogleIdentity, loginAt time.Time) (*domain.User, error) {
 				return &domain.User{ID: 1, Email: identity.Email, Role: domain.UserRoleUser}, nil
 			},
@@ -890,27 +920,13 @@ func TestAuthController_HandleGoogleCallback_CreateSessionError(t *testing.T) {
 			},
 		},
 		&mockGoogleOAuthClient{
-			completeAuth: func(ctx context.Context, sessionData string, code string) (goth.User, error) {
-				return goth.User{
-					IDToken: "signed-id-token",
-					UserID:  "subject-1",
-					Email:   "user@example.com",
-					Name:    "Test User",
-				}, nil
+			completeAuth: func(ctx context.Context, sessionData string, code string) (string, error) {
+				return "signed-id-token", nil
 			},
 		},
 		testAuthConfig(),
 	)
 	controller.now = func() time.Time { return time.Unix(1700000000, 0).UTC() }
-	controller.idTokenValidator = &mockGoogleIDTokenValidator{
-		validate: func(ctx context.Context, idToken string, audience string) (googleIDTokenClaims, error) {
-			return googleIDTokenClaims{
-				Subject:       "subject-1",
-				Nonce:         "nonce-1",
-				EmailVerified: true,
-			}, nil
-		},
-	}
 
 	cookieValue, err := buildOAuthStateCookie(oauthStatePayload{
 		State:        "state-1",
@@ -937,167 +953,18 @@ func TestAuthController_HandleGoogleCallback_CreateSessionError(t *testing.T) {
 	}
 }
 
-func TestValidateGoogleUserData(t *testing.T) {
-	successUser := goth.User{
-		IDToken:   "signed-id-token",
-		UserID:    "subject-1",
-		Email:     "User@Example.com",
-		Name:      " User ",
-		AvatarURL: "https://example.com/avatar.jpg",
-	}
-	validClaims := googleIDTokenClaims{
-		Subject:       "subject-1",
-		Nonce:         "nonce-1",
-		EmailVerified: true,
-	}
-	testCases := []struct {
-		name             string
-		validator        GoogleIDTokenValidator
-		user             goth.User
-		expectedNonce    string
-		expectedAudience string
-		expectError      bool
-		expectedSubject  string
-		expectedEmail    string
-		expectedName     string
-	}{
-		{
-			name: "success",
-			validator: &mockGoogleIDTokenValidator{
-				validate: func(ctx context.Context, idToken string, audience string) (googleIDTokenClaims, error) {
-					if idToken != "signed-id-token" {
-						t.Fatalf("unexpected id token: %q", idToken)
-					}
-					if audience != "google-client-id" {
-						t.Fatalf("unexpected audience: %q", audience)
-					}
-					return validClaims, nil
-				},
-			},
-			user:             successUser,
-			expectedNonce:    "nonce-1",
-			expectedAudience: "google-client-id",
-			expectError:      false,
-			expectedSubject:  "subject-1",
-			expectedEmail:    "user@example.com",
-			expectedName:     "User",
-		},
-		{
-			name: "invalid token signature",
-			validator: &mockGoogleIDTokenValidator{
-				validate: func(ctx context.Context, idToken string, audience string) (googleIDTokenClaims, error) {
-					return googleIDTokenClaims{}, errors.New("invalid signature")
-				},
-			},
-			user:             successUser,
-			expectedNonce:    "nonce-1",
-			expectedAudience: "google-client-id",
-			expectError:      true,
-		},
-		{
-			name: "nonce mismatch",
-			validator: &mockGoogleIDTokenValidator{
-				validate: func(ctx context.Context, idToken string, audience string) (googleIDTokenClaims, error) {
-					return validClaims, nil
-				},
-			},
-			user:             successUser,
-			expectedNonce:    "other-nonce",
-			expectedAudience: "google-client-id",
-			expectError:      true,
-		},
-		{
-			name: "empty nonce",
-			validator: &mockGoogleIDTokenValidator{
-				validate: func(ctx context.Context, idToken string, audience string) (googleIDTokenClaims, error) {
-					claims := validClaims
-					claims.Nonce = ""
-					return claims, nil
-				},
-			},
-			user:             successUser,
-			expectedNonce:    "nonce-1",
-			expectedAudience: "google-client-id",
-			expectError:      true,
-		},
-		{
-			name: "email not verified",
-			validator: &mockGoogleIDTokenValidator{
-				validate: func(ctx context.Context, idToken string, audience string) (googleIDTokenClaims, error) {
-					claims := validClaims
-					claims.EmailVerified = false
-					return claims, nil
-				},
-			},
-			user:             successUser,
-			expectedNonce:    "nonce-1",
-			expectedAudience: "google-client-id",
-			expectError:      true,
-		},
-		{
-			name: "empty email",
-			validator: &mockGoogleIDTokenValidator{
-				validate: func(ctx context.Context, idToken string, audience string) (googleIDTokenClaims, error) {
-					return validClaims, nil
-				},
-			},
-			user: goth.User{
-				IDToken: "signed-id-token",
-				UserID:  "subject-1",
-				Email:   "   ",
-				Name:    "User",
-			},
-			expectedNonce:    "nonce-1",
-			expectedAudience: "google-client-id",
-			expectError:      true,
-		},
-		{
-			name: "mismatched user subject",
-			validator: &mockGoogleIDTokenValidator{
-				validate: func(ctx context.Context, idToken string, audience string) (googleIDTokenClaims, error) {
-					return validClaims, nil
-				},
-			},
-			user: goth.User{
-				IDToken: "signed-id-token",
-				UserID:  "different-subject",
-				Email:   "user@example.com",
-				Name:    "User",
-			},
-			expectedNonce:    "nonce-1",
-			expectedAudience: "google-client-id",
-			expectError:      true,
-		},
-	}
+func TestGoogleOAuthClient_CompleteAuth_RespectsContext(t *testing.T) {
+	client := NewGoogleOAuthClient(testAuthConfig())
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			identity, err := validateGoogleUserData(
-				context.Background(),
-				tc.validator,
-				tc.user,
-				tc.expectedNonce,
-				tc.expectedAudience,
-			)
-			if tc.expectError {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if identity.Subject != tc.expectedSubject {
-				t.Fatalf("subject mismatch: got %q want %q", identity.Subject, tc.expectedSubject)
-			}
-			if identity.Email != tc.expectedEmail {
-				t.Fatalf("email mismatch: got %q want %q", identity.Email, tc.expectedEmail)
-			}
-			if identity.DisplayName != tc.expectedName {
-				t.Fatalf("display name mismatch: got %q want %q", identity.DisplayName, tc.expectedName)
-			}
-		})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := client.CompleteAuth(ctx, `{"AuthURL":"","AccessToken":"","RefreshToken":"","ExpiresAt":"0001-01-01T00:00:00Z","IDToken":""}`, "code")
+	if err == nil {
+		t.Fatal("expected error for cancelled context")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
 	}
 }
 

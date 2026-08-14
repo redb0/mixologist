@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/redb0/mixologist/internal/domain"
+	"github.com/redb0/mixologist/internal/httperr"
 	"github.com/redb0/mixologist/internal/services"
 )
 
@@ -23,13 +24,13 @@ func NewIngredientController(service services.IngredientService) *IngredientCont
 func (c *IngredientController) ListIngredients(ctx *gin.Context) {
 	params, err := parseIngredientListParams(ctx)
 	if err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 
 	page, err := c.service.List(ctx, params)
 	if err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusOK, toIngredientListResponse(page))
@@ -38,12 +39,12 @@ func (c *IngredientController) ListIngredients(ctx *gin.Context) {
 func (c *IngredientController) GetIngredient(ctx *gin.Context) {
 	id, err := parseIngredientID(ctx)
 	if err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 	ingredient, err := c.service.GetByID(ctx, id)
 	if err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusOK, toIngredientResponsePtr(ingredient))
@@ -52,12 +53,12 @@ func (c *IngredientController) GetIngredient(ctx *gin.Context) {
 func (c *IngredientController) GetIngredientIcon(ctx *gin.Context) {
 	id, err := parseIngredientID(ctx)
 	if err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 	icon, err := c.service.GetIcon(ctx, id)
 	if err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 	ctx.Header("Content-Length", strconv.Itoa(len(icon)))
@@ -68,7 +69,7 @@ func (c *IngredientController) GetIngredientIcon(ctx *gin.Context) {
 func (c *IngredientController) CreateIngredient(ctx *gin.Context) {
 	var ingredientRequest CreateIngredientRequest
 	if err := ctx.ShouldBindJSON(&ingredientRequest); err != nil {
-		RespondError(ctx, domain.NewErrInvalidIngredientData("некорректные данные запроса"))
+		httperr.WriteError(ctx, domain.NewErrInvalidIngredientData("некорректные данные запроса"))
 		return
 	}
 
@@ -81,7 +82,7 @@ func (c *IngredientController) CreateIngredient(ctx *gin.Context) {
 		ingredientRequest.IngredientType,
 	)
 	if err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusCreated, toIngredientResponsePtr(ingredient))
@@ -90,13 +91,13 @@ func (c *IngredientController) CreateIngredient(ctx *gin.Context) {
 func (c *IngredientController) UpdateIngredient(ctx *gin.Context) {
 	id, err := parseIngredientID(ctx)
 	if err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 
 	var req UpdateIngredientRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		RespondError(ctx, domain.NewErrInvalidIngredientData("некорректные данные запроса"))
+		httperr.WriteError(ctx, domain.NewErrInvalidIngredientData("некорректные данные запроса"))
 		return
 	}
 
@@ -109,7 +110,7 @@ func (c *IngredientController) UpdateIngredient(ctx *gin.Context) {
 		IngredientType:  req.IngredientType,
 	})
 	if err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusOK, toIngredientResponsePtr(ingredient))
@@ -118,12 +119,12 @@ func (c *IngredientController) UpdateIngredient(ctx *gin.Context) {
 func (c *IngredientController) DeleteIngredient(ctx *gin.Context) {
 	id, err := parseIngredientID(ctx)
 	if err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 
 	if err := c.service.Delete(ctx, id); err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 	ctx.Status(http.StatusNoContent)
@@ -132,7 +133,7 @@ func (c *IngredientController) DeleteIngredient(ctx *gin.Context) {
 func (c *IngredientController) SetIngredientIcon(ctx *gin.Context) {
 	id, err := parseIngredientID(ctx)
 	if err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 
@@ -142,15 +143,15 @@ func (c *IngredientController) SetIngredientIcon(ctx *gin.Context) {
 	if err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			RespondError(ctx, domain.NewErrInvalidIngredientData("иконка слишком большая (макс. 512 KB)"))
+			httperr.WriteError(ctx, domain.NewErrInvalidIngredientData("иконка слишком большая (макс. 512 KB)"))
 			return
 		}
-		RespondError(ctx, domain.NewErrInvalidIngredientData("не удалось прочитать тело запроса"))
+		httperr.WriteError(ctx, domain.NewErrInvalidIngredientData("не удалось прочитать тело запроса"))
 		return
 	}
 
 	if err := c.service.SetIcon(ctx, id, icon); err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 	ctx.Status(http.StatusNoContent)

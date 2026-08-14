@@ -13,12 +13,12 @@ info:
 
     Авторизация — Google OAuth на backend, opaque HttpOnly cookie-сессия.
     Mutating API с cookie-сессией защищается CSRF-заголовком `X-CSRF-Token`.
-    Enforcement RBAC/CSRF подключается в этапе 1; контракт auth endpoints зафиксирован заранее.
+    Чтение ingredients публичное; мутации ingredients — только `admin`.
 servers:
   - url: /
     description: Same-origin (Vite/nginx proxy или backend)
 security:
-  # CookieSession опционален до этапа 1 (`{}` = без auth).
+  # CookieSession опционален: `{}` = без auth (публичные GET).
   - CookieSession: []
   - {}
 tags:
@@ -240,7 +240,8 @@ paths:
         `totalSize` — точное число записей после фильтров, до ограничения текущей страницы.
         Пустая строка `nextPageToken` означает отсутствие следующей страницы.
 
-        Права (этап 1): `user` или `admin`.
+        Публичный endpoint: аутентификация не требуется.
+      security: []
       parameters:
         - $ref: "#/components/parameters/PageSize"
         - $ref: "#/components/parameters/PageToken"
@@ -261,10 +262,6 @@ paths:
                 $ref: "#/components/schemas/IngredientListResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalError"
         "503":
@@ -275,7 +272,9 @@ paths:
       tags: [ingredients]
       summary: Создать ингредиент
       description: |
-        Права (этап 1): только `admin`.
+        Права: только `admin`.
+      security:
+        - CookieSession: []
       parameters:
         - $ref: "#/components/parameters/CSRFToken"
       requestBody:
@@ -315,7 +314,8 @@ paths:
       tags: [ingredients]
       summary: Получить ингредиент по ID
       description: |
-        Права (этап 1): `user` или `admin`.
+        Публичный endpoint: аутентификация не требуется.
+      security: []
       responses:
         "200":
           description: Ингредиент найден
@@ -328,10 +328,6 @@ paths:
                 $ref: "#/components/schemas/Ingredient"
         "400":
           $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
@@ -348,7 +344,9 @@ paths:
         Необходимо передать хотя бы одно изменяемое поле помимо `version`.
         Пустой body `{}` или только `{"version": N}` — `VALIDATION_ERROR`.
 
-        Права (этап 1): только `admin`.
+        Права: только `admin`.
+      security:
+        - CookieSession: []
       parameters:
         - $ref: "#/components/parameters/CSRFToken"
       requestBody:
@@ -390,7 +388,9 @@ paths:
         При использовании ингредиента в рецептах возвращается `409 RESOURCE_IN_USE`
         (реальные FK появятся вместе с recipes).
 
-        Права (этап 1): только `admin`.
+        Права: только `admin`.
+      security:
+        - CookieSession: []
       parameters:
         - $ref: "#/components/parameters/CSRFToken"
       responses:
@@ -422,7 +422,8 @@ paths:
       tags: [ingredients]
       summary: Получить иконку ингредиента
       description: |
-        Права (этап 1): `user` или `admin`.
+        Публичный endpoint: аутентификация не требуется.
+      security: []
       responses:
         "200":
           description: Бинарная иконка (PNG или JPEG)
@@ -450,10 +451,6 @@ paths:
                 format: binary
         "400":
           $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
@@ -467,7 +464,9 @@ paths:
       summary: Загрузить иконку ингредиента
       description: |
         Сырое тело файла (PNG или JPEG), максимум 512 KB.
-        Права (этап 1): только `admin`.
+        Права: только `admin`.
+      security:
+        - CookieSession: []
       parameters:
         - $ref: "#/components/parameters/CSRFToken"
       requestBody:
@@ -505,7 +504,7 @@ components:
       name: session
       description: |
         Opaque HttpOnly cookie-сессия после Google OAuth.
-        Роли: чтение (`GET`) — `user`/`admin`; мутации — только `admin`.
+        Чтение ingredients публичное; мутации ingredients — только `admin`.
         Mutating запросы (`POST`, `PUT`, `PATCH`, `DELETE`) с cookie-сессией
         дополнительно требуют CSRF-заголовок `X-CSRF-Token`. Токен выпускается
         сервером (HMAC от session token и часового timestamp), отдаётся клиенту
@@ -696,7 +695,7 @@ components:
                   request_id: 550e8400-e29b-41d4-a716-446655440000
 
     Unauthorized:
-      description: Требуется аутентификация (`UNAUTHORIZED`). Enforcement с этапа 1.
+      description: Требуется аутентификация (`UNAUTHORIZED`).
       headers:
         X-Request-ID:
           $ref: "#/components/headers/XRequestID"
@@ -711,7 +710,7 @@ components:
               request_id: 550e8400-e29b-41d4-a716-446655440000
 
     Forbidden:
-      description: Недостаточно прав (`FORBIDDEN`). Enforcement с этапа 1.
+      description: Недостаточно прав (`FORBIDDEN`).
       headers:
         X-Request-ID:
           $ref: "#/components/headers/XRequestID"

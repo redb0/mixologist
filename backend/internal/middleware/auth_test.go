@@ -17,6 +17,7 @@ import (
 
 	"github.com/redb0/mixologist/internal/config"
 	"github.com/redb0/mixologist/internal/domain"
+	"github.com/redb0/mixologist/internal/httperr"
 )
 
 var csrfTestNow = time.Unix(1_700_000_000, 0).UTC()
@@ -83,7 +84,7 @@ func TestAuthMiddleware(t *testing.T) {
 			path:       "/me",
 			lookup:     &stubSessionLookup{},
 			wantStatus: http.StatusUnauthorized,
-			wantCode:   codeUnauthorized,
+			wantCode:   httperr.CodeUnauthorized,
 		},
 		{
 			name:   "expired session returns 401",
@@ -94,7 +95,7 @@ func TestAuthMiddleware(t *testing.T) {
 				{Name: cfg.SessionCookieName, Value: "expired-token"},
 			},
 			wantStatus: http.StatusUnauthorized,
-			wantCode:   codeUnauthorized,
+			wantCode:   httperr.CodeUnauthorized,
 		},
 		{
 			name:   "revoked session returns 401",
@@ -105,7 +106,7 @@ func TestAuthMiddleware(t *testing.T) {
 				{Name: cfg.SessionCookieName, Value: "revoked-token"},
 			},
 			wantStatus: http.StatusUnauthorized,
-			wantCode:   codeUnauthorized,
+			wantCode:   httperr.CodeUnauthorized,
 		},
 		{
 			name:   "authenticated user without admin role returns 403",
@@ -117,7 +118,7 @@ func TestAuthMiddleware(t *testing.T) {
 			},
 			csrfHeader: userCSRF,
 			wantStatus: http.StatusForbidden,
-			wantCode:   codeForbidden,
+			wantCode:   httperr.CodeForbidden,
 		},
 		{
 			name:   "admin passes RequireRole",
@@ -225,7 +226,7 @@ func TestAuthMiddleware(t *testing.T) {
 				{Name: cfg.SessionCookieName, Value: "session-token"},
 			},
 			wantStatus: http.StatusServiceUnavailable,
-			wantCode:   codeServiceUnavailable,
+			wantCode:   httperr.CodeServiceUnavailable,
 		},
 		{
 			name:       "require role without auth returns 401",
@@ -233,7 +234,7 @@ func TestAuthMiddleware(t *testing.T) {
 			path:       "/role-only",
 			lookup:     &stubSessionLookup{},
 			wantStatus: http.StatusUnauthorized,
-			wantCode:   codeUnauthorized,
+			wantCode:   httperr.CodeUnauthorized,
 		},
 	}
 
@@ -460,35 +461,35 @@ func TestMapError(t *testing.T) {
 			name:       "unauthorized",
 			err:        domain.NewErrUnauthorized("требуется аутентификация"),
 			wantStatus: http.StatusUnauthorized,
-			wantCode:   codeUnauthorized,
+			wantCode:   httperr.CodeUnauthorized,
 			wantMsg:    "требуется аутентификация",
 		},
 		{
 			name:       "forbidden",
 			err:        domain.NewErrForbidden("недостаточно прав"),
 			wantStatus: http.StatusForbidden,
-			wantCode:   codeForbidden,
+			wantCode:   httperr.CodeForbidden,
 			wantMsg:    "недостаточно прав",
 		},
 		{
 			name:       "service unavailable",
 			err:        domain.NewErrServiceUnavailable("сервис недоступен"),
 			wantStatus: http.StatusServiceUnavailable,
-			wantCode:   codeServiceUnavailable,
+			wantCode:   httperr.CodeServiceUnavailable,
 			wantMsg:    "сервис недоступен",
 		},
 		{
 			name:       "unknown",
 			err:        errors.New("boom"),
 			wantStatus: http.StatusInternalServerError,
-			wantCode:   codeInternalError,
-			wantMsg:    internalErrorMessage,
+			wantCode:   httperr.CodeInternalError,
+			wantMsg:    httperr.InternalServerErrorMessage,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status, code, message := mapError(tt.err)
+			status, code, message := httperr.Map(tt.err)
 			assert.Equal(t, tt.wantStatus, status)
 			assert.Equal(t, tt.wantCode, code)
 			assert.Equal(t, tt.wantMsg, message)

@@ -93,7 +93,7 @@ func TestAuthService_UpsertGoogleUser_SetsAdminRoleByAllowlist(t *testing.T) {
 			return &domain.User{ID: 1, Role: role, Email: identity.Email}, nil
 		},
 	}
-	service := NewAuthService(users, &mockSessionRepository{}, []string{"admin@example.com"})
+	service := newTestAuthService(users, &mockSessionRepository{}, []string{"admin@example.com"}, nil)
 
 	user, err := service.UpsertGoogleUser(context.Background(), domain.GoogleIdentity{
 		Subject:     "google-subject",
@@ -126,7 +126,7 @@ func TestAuthService_CreateSession_StoresOnlyTokenHash(t *testing.T) {
 			return session, nil
 		},
 	}
-	service := NewAuthService(&mockUserRepository{}, repo, nil)
+	service := newTestAuthService(&mockUserRepository{}, repo, nil, nil)
 
 	rawToken, session, err := service.CreateSession(
 		context.Background(),
@@ -162,7 +162,7 @@ func TestAuthService_CreateSession_RepositoryError(t *testing.T) {
 			return nil, repoErr
 		},
 	}
-	service := NewAuthService(&mockUserRepository{}, repo, nil)
+	service := newTestAuthService(&mockUserRepository{}, repo, nil, nil)
 
 	rawToken, session, err := service.CreateSession(context.Background(), 11, time.Hour, time.Now(), nil)
 	if rawToken != "" || session != nil {
@@ -180,7 +180,7 @@ func TestAuthService_GetActiveSessionByRawToken_RepositoryError(t *testing.T) {
 			return nil, repoErr
 		},
 	}
-	service := NewAuthService(&mockUserRepository{}, repo, nil)
+	service := newTestAuthService(&mockUserRepository{}, repo, nil, nil)
 
 	session, err := service.GetActiveSessionByRawToken(context.Background(), "token", time.Now())
 	if session != nil {
@@ -197,7 +197,7 @@ func TestAuthService_GetActiveSessionByRawToken_NotFoundReturnsUnauthorized(t *t
 			return nil, domain.NewErrNotFound("сессия не найдена")
 		},
 	}
-	service := NewAuthService(&mockUserRepository{}, repo, nil)
+	service := newTestAuthService(&mockUserRepository{}, repo, nil, nil)
 
 	session, err := service.GetActiveSessionByRawToken(context.Background(), "token", time.Now())
 	if session != nil {
@@ -216,7 +216,7 @@ func TestAuthService_RevokeSessionByRawToken_Success(t *testing.T) {
 			return nil
 		},
 	}
-	service := NewAuthService(&mockUserRepository{}, repo, nil)
+	service := newTestAuthService(&mockUserRepository{}, repo, nil, nil)
 
 	err := service.RevokeSessionByRawToken(context.Background(), "token", time.Now())
 	if err != nil {
@@ -228,7 +228,7 @@ func TestAuthService_RevokeSessionByRawToken_Success(t *testing.T) {
 }
 
 func TestAuthService_RevokeSessionByRawToken_EmptyToken(t *testing.T) {
-	service := NewAuthService(&mockUserRepository{}, &mockSessionRepository{}, nil)
+	service := newTestAuthService(&mockUserRepository{}, &mockSessionRepository{}, nil, nil)
 
 	err := service.RevokeSessionByRawToken(context.Background(), "   ", time.Now())
 	if !errors.Is(err, domain.ErrUnauthorized) {
@@ -243,7 +243,7 @@ func TestAuthService_RevokeSessionByRawToken_RepositoryError(t *testing.T) {
 			return repoErr
 		},
 	}
-	service := NewAuthService(&mockUserRepository{}, repo, nil)
+	service := newTestAuthService(&mockUserRepository{}, repo, nil, nil)
 
 	err := service.RevokeSessionByRawToken(context.Background(), "token", time.Now())
 	if !errors.Is(err, repoErr) {
@@ -257,7 +257,7 @@ func TestAuthService_RevokeSessionByRawToken_NotFoundReturnsUnauthorized(t *test
 			return domain.NewErrNotFound("сессия не найдена")
 		},
 	}
-	service := NewAuthService(&mockUserRepository{}, repo, nil)
+	service := newTestAuthService(&mockUserRepository{}, repo, nil, nil)
 
 	err := service.RevokeSessionByRawToken(context.Background(), "token", time.Now())
 	if !errors.Is(err, domain.ErrUnauthorized) {
@@ -278,7 +278,7 @@ func TestAuthService_UpsertGoogleUser_AssignsUserRoleOutsideAllowlist(t *testing
 			return &domain.User{ID: 1, Role: role, Email: identity.Email}, nil
 		},
 	}
-	service := NewAuthService(users, &mockSessionRepository{}, []string{"admin@example.com"})
+	service := newTestAuthService(users, &mockSessionRepository{}, []string{"admin@example.com"}, nil)
 
 	user, err := service.UpsertGoogleUser(context.Background(), domain.GoogleIdentity{
 		Subject:     "google-subject",
@@ -297,7 +297,7 @@ func TestAuthService_UpsertGoogleUser_AssignsUserRoleOutsideAllowlist(t *testing
 }
 
 func TestAuthService_UpsertGoogleUser_Validation(t *testing.T) {
-	service := NewAuthService(&mockUserRepository{}, &mockSessionRepository{}, nil)
+	service := newTestAuthService(&mockUserRepository{}, &mockSessionRepository{}, nil, nil)
 	tests := []struct {
 		name     string
 		identity domain.GoogleIdentity
@@ -334,7 +334,7 @@ func TestAuthService_UpsertGoogleUser_Validation(t *testing.T) {
 }
 
 func TestAuthService_CreateSession_Validation(t *testing.T) {
-	service := NewAuthService(&mockUserRepository{}, &mockSessionRepository{}, nil)
+	service := newTestAuthService(&mockUserRepository{}, &mockSessionRepository{}, nil, nil)
 
 	_, session, err := service.CreateSession(context.Background(), 0, time.Hour, time.Now(), nil)
 	if session != nil {
@@ -354,7 +354,7 @@ func TestAuthService_CreateSession_Validation(t *testing.T) {
 }
 
 func TestAuthService_GetActiveSessionByRawToken_EmptyToken(t *testing.T) {
-	service := NewAuthService(&mockUserRepository{}, &mockSessionRepository{}, nil)
+	service := newTestAuthService(&mockUserRepository{}, &mockSessionRepository{}, nil, nil)
 
 	session, err := service.GetActiveSessionByRawToken(context.Background(), "   ", time.Now())
 	if session != nil {
@@ -376,7 +376,7 @@ func TestAuthService_GetUserBySessionToken_UserNotFound(t *testing.T) {
 			return nil, domain.NewErrNotFound("пользователь не найден")
 		},
 	}
-	service := NewAuthService(users, repo, nil)
+	service := newTestAuthService(users, repo, nil, nil)
 
 	user, err := service.GetUserBySessionToken(context.Background(), "token", time.Now())
 	if user != nil {
@@ -393,7 +393,7 @@ func TestAuthService_CleanupExpiredOrRevokedSessions(t *testing.T) {
 			return 3, nil
 		},
 	}
-	service := NewAuthService(&mockUserRepository{}, repo, nil)
+	service := newTestAuthService(&mockUserRepository{}, repo, nil, nil)
 
 	deleted, err := service.CleanupExpiredOrRevokedSessions(context.Background(), time.Now())
 	if err != nil {
@@ -416,7 +416,7 @@ func TestAuthService_GetUserBySessionToken_UserLookupError(t *testing.T) {
 			return nil, repoErr
 		},
 	}
-	service := NewAuthService(users, repo, nil)
+	service := newTestAuthService(users, repo, nil, nil)
 
 	user, err := service.GetUserBySessionToken(context.Background(), "token", time.Now())
 	if user != nil {
@@ -433,7 +433,7 @@ func TestAuthService_GetUserBySessionToken_InvalidSession(t *testing.T) {
 			return nil, domain.NewErrNotFound("сессия не найдена")
 		},
 	}
-	service := NewAuthService(&mockUserRepository{}, repo, nil)
+	service := newTestAuthService(&mockUserRepository{}, repo, nil, nil)
 
 	user, err := service.GetUserBySessionToken(context.Background(), "token", time.Now())
 	if user != nil {
@@ -458,7 +458,7 @@ func TestAuthService_GetUserBySessionToken(t *testing.T) {
 			return &domain.User{ID: 7, Email: "user@example.com"}, nil
 		},
 	}
-	service := NewAuthService(users, repo, nil)
+	service := newTestAuthService(users, repo, nil, nil)
 
 	user, err := service.GetUserBySessionToken(context.Background(), "token", time.Now())
 	if err != nil {

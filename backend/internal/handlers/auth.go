@@ -15,14 +15,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
-	"github.com/markbates/goth"
 	gothGoogle "github.com/markbates/goth/providers/google"
-	"google.golang.org/api/idtoken"
 
 	"github.com/redb0/mixologist/internal/config"
 	"github.com/redb0/mixologist/internal/domain"
+	"github.com/redb0/mixologist/internal/httperr"
 	"github.com/redb0/mixologist/internal/middleware"
 	"github.com/redb0/mixologist/internal/services"
 )
@@ -34,38 +32,24 @@ const (
 
 	CodeOAuthStateInvalid   = "OAUTH_STATE_INVALID"
 	CodeOAuthCallbackFailed = "OAUTH_CALLBACK_FAILED"
-	CodeCSRFTokenInvalid    = "CSRF_TOKEN_INVALID"
 )
 
 var returnToPattern = regexp.MustCompile(`^/(?:$|[^/\\\s][^\\\s]*)$`)
 
 type AuthController struct {
-	authService      services.AuthService
-	oauthClient      GoogleOAuthClient
-	idTokenValidator GoogleIDTokenValidator
-	authConfig       config.AuthConfig
-	now              func() time.Time
+	authService services.AuthService
+	oauthClient GoogleOAuthClient
+	authConfig  config.AuthConfig
+	now         func() time.Time
 }
 
 type GoogleOAuthClient interface {
 	BeginAuth(state string, nonce string) (authURL string, sessionData string, err error)
-	CompleteAuth(ctx context.Context, sessionData string, code string) (goth.User, error)
+	CompleteAuth(ctx context.Context, sessionData string, code string) (idToken string, err error)
 }
 
 type googleOAuthClient struct {
 	provider *gothGoogle.Provider
-}
-
-type GoogleIDTokenValidator interface {
-	Validate(ctx context.Context, idToken string, audience string) (googleIDTokenClaims, error)
-}
-
-type googleIDTokenValidator struct{}
-
-type googleIDTokenClaims struct {
-	Subject       string
-	Nonce         string
-	EmailVerified bool
 }
 
 type oauthStatePayload struct {
@@ -97,10 +81,6 @@ func NewGoogleOAuthClient(authConfig config.AuthConfig) GoogleOAuthClient {
 	}
 }
 
-func NewGoogleIDTokenValidator() GoogleIDTokenValidator {
-	return googleIDTokenValidator{}
-}
-
 func (c *googleOAuthClient) BeginAuth(state string, nonce string) (string, string, error) {
 	if strings.TrimSpace(state) == "" || strings.TrimSpace(nonce) == "" {
 		return "", "", domain.NewErrInvalidAuthData("state и nonce обязательны")
@@ -122,34 +102,45 @@ func (c *googleOAuthClient) BeginAuth(state string, nonce string) (string, strin
 	return authURL, session.Marshal(), nil
 }
 
-func (c *googleOAuthClient) CompleteAuth(ctx context.Context, sessionData string, code string) (goth.User, error) {
-	session, err := c.provider.UnmarshalSession(sessionData)
+func (c *googleOAuthClient) CompleteAuth(ctx context.Context, sessionData string, code string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
+	provider := *c.provider
+	provider.HTTPClient = contextHTTPClient(ctx)
+
+	session, err := provider.UnmarshalSession(sessionData)
 	if err != nil {
-		return goth.User{}, err
+		return "", err
 	}
-	if _, err = session.Authorize(c.provider, url.Values{"code": []string{code}}); err != nil {
-		return goth.User{}, err
+	if _, err = session.Authorize(&provider, url.Values{"code": []string{code}}); err != nil {
+		return "", err
 	}
-	return c.provider.FetchUser(session)
+
+	googleSession, ok := session.(*gothGoogle.Session)
+	if !ok {
+		return "", errors.New("unexpected google session type")
+	}
+	if strings.TrimSpace(googleSession.IDToken) == "" {
+		return "", errors.New("id_token missing from oauth response")
+	}
+	return googleSession.IDToken, nil
 }
 
-func (v googleIDTokenValidator) Validate(
-	ctx context.Context,
-	rawIDToken string,
-	audience string,
-) (googleIDTokenClaims, error) {
-	payload, err := idtoken.Validate(ctx, rawIDToken, audience)
-	if err != nil {
-		return googleIDTokenClaims{}, err
+func contextHTTPClient(ctx context.Context) *http.Client {
+	return &http.Client{
+		Transport: contextRoundTripper{ctx: ctx, base: http.DefaultTransport},
 	}
+}
 
-	nonce, _ := payload.Claims["nonce"].(string)
-	emailVerified, _ := payload.Claims["email_verified"].(bool)
-	return googleIDTokenClaims{
-		Subject:       payload.Subject,
-		Nonce:         nonce,
-		EmailVerified: emailVerified,
-	}, nil
+type contextRoundTripper struct {
+	ctx  context.Context
+	base http.RoundTripper
+}
+
+func (rt contextRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return rt.base.RoundTrip(req.WithContext(rt.ctx))
 }
 
 func NewAuthController(
@@ -158,35 +149,34 @@ func NewAuthController(
 	authConfig config.AuthConfig,
 ) *AuthController {
 	return &AuthController{
-		authService:      authService,
-		oauthClient:      oauthClient,
-		idTokenValidator: NewGoogleIDTokenValidator(),
-		authConfig:       authConfig,
-		now:              time.Now,
+		authService: authService,
+		oauthClient: oauthClient,
+		authConfig:  authConfig,
+		now:         time.Now,
 	}
 }
 
 func (c *AuthController) StartGoogleLogin(ctx *gin.Context) {
 	returnTo, err := validateReturnTo(ctx.Query("return_to"))
 	if err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 
 	state, err := randomToken(32)
 	if err != nil {
-		RespondError(ctx, domain.NewErrServiceUnavailable("не удалось создать oauth state"))
+		httperr.WriteError(ctx, domain.NewErrServiceUnavailable("не удалось создать oauth state"))
 		return
 	}
 	nonce, err := randomToken(32)
 	if err != nil {
-		RespondError(ctx, domain.NewErrServiceUnavailable("не удалось создать oauth nonce"))
+		httperr.WriteError(ctx, domain.NewErrServiceUnavailable("не удалось создать oauth nonce"))
 		return
 	}
 
 	authURL, oauthSession, err := c.oauthClient.BeginAuth(state, nonce)
 	if err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 
@@ -198,7 +188,7 @@ func (c *AuthController) StartGoogleLogin(ctx *gin.Context) {
 		ExpiresAt:    c.now().UTC().Add(oauthStateTTL).Unix(),
 	}, c.authConfig.SessionCookieSecret)
 	if err != nil {
-		RespondError(ctx, domain.NewErrServiceUnavailable("не удалось сохранить oauth state"))
+		httperr.WriteError(ctx, domain.NewErrServiceUnavailable("не удалось сохранить oauth state"))
 		return
 	}
 
@@ -240,21 +230,19 @@ func (c *AuthController) HandleGoogleCallback(ctx *gin.Context) {
 		return
 	}
 
-	userData, err := c.oauthClient.CompleteAuth(ctx.Request.Context(), statePayload.OAuthSession, code)
+	idToken, err := c.oauthClient.CompleteAuth(ctx.Request.Context(), statePayload.OAuthSession, code)
 	if err != nil {
 		respondAuthFlowError(ctx, http.StatusBadRequest, CodeOAuthCallbackFailed, "Не удалось завершить вход через Google")
 		return
 	}
 
-	identity, err := validateGoogleUserData(
+	identity, err := c.authService.GoogleIdentityFromIDToken(
 		ctx.Request.Context(),
-		c.idTokenValidator,
-		userData,
+		idToken,
 		statePayload.Nonce,
-		c.authConfig.GoogleClientID,
 	)
 	if err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 
@@ -264,7 +252,7 @@ func (c *AuthController) HandleGoogleCallback(ctx *gin.Context) {
 			respondAuthFlowError(ctx, http.StatusBadRequest, CodeOAuthCallbackFailed, "Не удалось завершить вход через Google")
 			return
 		}
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 
@@ -279,7 +267,7 @@ func (c *AuthController) HandleGoogleCallback(ctx *gin.Context) {
 		},
 	)
 	if err != nil {
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 
@@ -292,7 +280,7 @@ func (c *AuthController) HandleGoogleCallback(ctx *gin.Context) {
 func (c *AuthController) GetCurrentUser(ctx *gin.Context) {
 	user, ok := middleware.CurrentUser(ctx)
 	if !ok {
-		RespondError(ctx, domain.NewErrUnauthorized("требуется аутентификация"))
+		httperr.WriteError(ctx, domain.NewErrUnauthorized("требуется аутентификация"))
 		return
 	}
 
@@ -308,7 +296,7 @@ func (c *AuthController) GetCurrentUser(ctx *gin.Context) {
 func (c *AuthController) Logout(ctx *gin.Context) {
 	rawToken, err := ctx.Cookie(c.authConfig.SessionCookieName)
 	if err != nil {
-		RespondError(ctx, domain.NewErrUnauthorized("требуется аутентификация"))
+		httperr.WriteError(ctx, domain.NewErrUnauthorized("требуется аутентификация"))
 		return
 	}
 
@@ -317,7 +305,7 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 		// на отправке заведомо невалидной сессии.
 		c.clearCookie(ctx, c.authConfig.SessionCookieName, true)
 		c.clearCookie(ctx, c.authConfig.CSRFCookieName, false)
-		RespondError(ctx, err)
+		httperr.WriteError(ctx, err)
 		return
 	}
 
@@ -410,49 +398,8 @@ func parseOAuthStateCookie(value string, secret string) (oauthStatePayload, erro
 	return payload, nil
 }
 
-func validateGoogleUserData(
-	ctx context.Context,
-	validator GoogleIDTokenValidator,
-	user goth.User,
-	expectedNonce string,
-	expectedAudience string,
-) (domain.GoogleIdentity, error) {
-	claims, err := validator.Validate(ctx, user.IDToken, expectedAudience)
-	if err != nil {
-		return domain.GoogleIdentity{}, domain.NewErrUnauthorized("невалидный identity token")
-	}
-	if strings.TrimSpace(claims.Nonce) == "" || claims.Nonce != expectedNonce {
-		return domain.GoogleIdentity{}, domain.NewErrUnauthorized("невалидный identity token")
-	}
-	if !claims.EmailVerified {
-		return domain.GoogleIdentity{}, domain.NewErrUnauthorized("невалидный identity token")
-	}
-	if strings.TrimSpace(claims.Subject) == "" ||
-		strings.TrimSpace(user.UserID) == "" ||
-		strings.TrimSpace(user.Email) == "" ||
-		strings.TrimSpace(user.Name) == "" {
-		return domain.GoogleIdentity{}, domain.NewErrUnauthorized("невалидный identity token")
-	}
-	if strings.TrimSpace(user.UserID) != claims.Subject {
-		return domain.GoogleIdentity{}, domain.NewErrUnauthorized("невалидный identity token")
-	}
-
-	return domain.GoogleIdentity{
-		Subject:     claims.Subject,
-		Email:       strings.ToLower(strings.TrimSpace(user.Email)),
-		DisplayName: strings.TrimSpace(user.Name),
-		AvatarURL:   strings.TrimSpace(user.AvatarURL),
-	}, nil
-}
-
 func respondAuthFlowError(c *gin.Context, status int, code string, message string) {
-	c.JSON(status, ErrorResponse{
-		Error: ErrorBody{
-			Code:      code,
-			Message:   message,
-			RequestID: requestid.Get(c),
-		},
-	})
+	httperr.Write(c, status, code, message)
 }
 
 func appendQueryParam(rawURL string, key string, value string) (string, error) {

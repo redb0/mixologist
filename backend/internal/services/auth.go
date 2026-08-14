@@ -17,6 +17,7 @@ import (
 const sessionTokenSize = 32
 
 type AuthService interface {
+	GoogleIdentityFromIDToken(ctx context.Context, rawIDToken string, expectedNonce string) (domain.GoogleIdentity, error)
 	UpsertGoogleUser(ctx context.Context, identity domain.GoogleIdentity, loginAt time.Time) (*domain.User, error)
 	CreateSession(
 		ctx context.Context,
@@ -32,16 +33,23 @@ type AuthService interface {
 }
 
 type authService struct {
-	users       repository.UserRepository
-	sessions    repository.SessionRepository
-	adminEmails map[string]struct{}
+	users            repository.UserRepository
+	sessions         repository.SessionRepository
+	adminEmails      map[string]struct{}
+	idTokenValidator IDTokenValidator
+	googleClientID   string
 }
 
 func NewAuthService(
 	users repository.UserRepository,
 	sessions repository.SessionRepository,
 	adminEmails []string,
+	idTokenValidator IDTokenValidator,
+	googleClientID string,
 ) AuthService {
+	if idTokenValidator == nil {
+		idTokenValidator = NewGoogleIDTokenValidator()
+	}
 	normalizedAdmins := make(map[string]struct{}, len(adminEmails))
 	for _, email := range adminEmails {
 		normalized := normalizeEmail(email)
@@ -50,9 +58,11 @@ func NewAuthService(
 		}
 	}
 	return &authService{
-		users:       users,
-		sessions:    sessions,
-		adminEmails: normalizedAdmins,
+		users:            users,
+		sessions:         sessions,
+		adminEmails:      normalizedAdmins,
+		idTokenValidator: idTokenValidator,
+		googleClientID:   strings.TrimSpace(googleClientID),
 	}
 }
 

@@ -128,7 +128,7 @@ export interface paths {
          *     `totalSize` — точное число записей после фильтров, до ограничения текущей страницы.
          *     Пустая строка `nextPageToken` означает отсутствие следующей страницы.
          *
-         *     Права (этап 1): `user` или `admin`.
+         *     Публичный endpoint: аутентификация не требуется.
          */
         get: operations["listIngredients"];
         put?: never;
@@ -155,7 +155,7 @@ export interface paths {
         };
         /**
          * Получить ингредиент по ID
-         * @description Права (этап 1): `user` или `admin`.
+         * @description Публичный endpoint: аутентификация не требуется.
          */
         get: operations["getIngredient"];
         put?: never;
@@ -193,7 +193,7 @@ export interface paths {
         };
         /**
          * Получить иконку ингредиента
-         * @description Права (этап 1): `user` или `admin`.
+         * @description Публичный endpoint: аутентификация не требуется.
          */
         get: operations["getIngredientIcon"];
         /**
@@ -728,8 +728,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -796,8 +794,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
@@ -911,8 +907,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];

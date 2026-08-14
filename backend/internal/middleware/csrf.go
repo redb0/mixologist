@@ -12,10 +12,11 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/redb0/mixologist/internal/config"
+	"github.com/redb0/mixologist/internal/httperr"
 )
 
 const (
-	CodeCSRFTokenInvalid = "CSRF_TOKEN_INVALID"
+	CodeCSRFTokenInvalid = httperr.CodeCSRFTokenInvalid
 	csrfInvalidMessage   = "Некорректный CSRF token"
 	csrfMACPrefix        = "csrf-v1:"
 	csrfHourSeconds      = int64(3600)
@@ -81,7 +82,7 @@ func RequireCSRF(cfg config.AuthConfig, now func() time.Time) gin.HandlerFunc {
 
 		headerToken := strings.TrimSpace(c.GetHeader(cfg.CSRFHeaderName))
 		if !ValidCSRFToken(cfg.CSRFSecret, sessionToken, headerToken, now().UTC()) {
-			abortJSON(c, http.StatusForbidden, CodeCSRFTokenInvalid, csrfInvalidMessage)
+			httperr.Abort(c, http.StatusForbidden, CodeCSRFTokenInvalid, csrfInvalidMessage)
 			return
 		}
 

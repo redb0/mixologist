@@ -45,7 +45,8 @@ backend/
 ├── cmd/api/main.go              # config, DB, router
 ├── internal/
 │   ├── config/                  # HTTP_ADDR, GIN_MODE, LOG_LEVEL
-│   ├── middleware/              # request ID, access log, recovery
+│   ├── middleware/              # request ID, access log, recovery, auth, CSRF
+│   ├── httperr/                 # единый HTTP error envelope
 │   ├── router/                  # /health и group /api/v1
 │   ├── contract/                # OpenAPI contract-тесты
 │   ├── domain/                  # сущности и domain-ошибки
@@ -87,6 +88,25 @@ frontend/
 
 Работа с иконками будет выполняться отдельно от CRUD операций с ингридиентом.
 
+### Пользователь и сессия
+
+| Атрибут          | Описание                         | Хранение                          |
+|------------------|----------------------------------|-----------------------------------|
+| `google_subject` | Идентификатор Google             | `users.google_subject` (unique)   |
+| `email`          | Email (unique case-insensitive)  | `users.email`                     |
+| `role`           | `user` или `admin`               | `users.role`; admin — allowlist   |
+| session token    | Opaque token                     | HttpOnly cookie; в БД только hash |
+
+Роль `admin` назначается по email allowlist (`AUTH_ADMIN_EMAILS`) при входе через Google OAuth.
+
+## Авторизация
+
+- **Вход:** `GET /api/v1/auth/google/login` → Google OAuth → callback → HttpOnly session cookie + CSRF cookie.
+- **Текущий пользователь:** `GET /api/v1/auth/me` (требует session cookie).
+- **Выход:** `POST /api/v1/auth/logout` (session cookie + `X-CSRF-Token`).
+- **CSRF:** mutating запросы с session cookie требуют заголовок `X-CSRF-Token` (HMAC от session token).
+- **RBAC:** чтение `/api/v1/ingredients*` публичное; `POST`/`PATCH`/`DELETE`/`PUT .../icon` — только `admin`.
+
 ## HTTP API
 
 Базовый URL: `http://localhost:8080`
@@ -95,16 +115,20 @@ frontend/
 
 Продуктовый API: `/api/v1`. Operational health: `GET /health`.
 
-| Метод    | Путь                              | Описание                    |
-|----------|-----------------------------------|-----------------------------|
-| `GET`    | `/health`                         | Состояние backend и БД      |
-| `GET`    | `/api/v1/ingredients`             | Список ингредиентов         |
-| `GET`    | `/api/v1/ingredients/:id`         | Ингредиент по ID            |
-| `GET`    | `/api/v1/ingredients/:id/icon`    | Получить иконку             |
-| `POST`   | `/api/v1/ingredients`             | Создать ингредиент          |
-| `PATCH`  | `/api/v1/ingredients/:id`         | Частичное обновление        |
-| `DELETE` | `/api/v1/ingredients/:id`         | Удалить ингредиент          |
-| `PUT`    | `/api/v1/ingredients/:id/icon`    | Загрузить иконку (PNG/JPEG) |
+| Метод    | Путь                              | Описание                    | Доступ        |
+|----------|-----------------------------------|-----------------------------|---------------|
+| `GET`    | `/health`                         | Состояние backend и БД      | публичный     |
+| `GET`    | `/api/v1/auth/google/login`       | Начать Google OAuth         | публичный     |
+| `GET`    | `/api/v1/auth/google/callback`    | Callback Google OAuth       | публичный     |
+| `GET`    | `/api/v1/auth/me`                 | Текущий пользователь        | auth          |
+| `POST`   | `/api/v1/auth/logout`             | Выход                       | auth + CSRF   |
+| `GET`    | `/api/v1/ingredients`             | Список ингредиентов         | публичный     |
+| `GET`    | `/api/v1/ingredients/:id`         | Ингредиент по ID            | публичный     |
+| `GET`    | `/api/v1/ingredients/:id/icon`    | Получить иконку             | публичный     |
+| `POST`   | `/api/v1/ingredients`             | Создать ингредиент          | admin + CSRF  |
+| `PATCH`  | `/api/v1/ingredients/:id`         | Частичное обновление        | admin + CSRF  |
+| `DELETE` | `/api/v1/ingredients/:id`         | Удалить ингредиент          | admin + CSRF  |
+| `PUT`    | `/api/v1/ingredients/:id/icon`    | Загрузить иконку (PNG/JPEG) | admin + CSRF  |
 
 Ошибки: envelope `{"error":{"code","message","request_id","details?"}}` + заголовок `X-Request-ID`.
 Контракт описан в `api/openapi.yaml`; frontend DTO генерируются через `openapi-typescript`.

@@ -16,6 +16,9 @@ import (
 	"github.com/redb0/mixologist/internal/services"
 )
 
+const sessionCleanupInterval = time.Hour
+const sessionCleanupTimeout = 30 * time.Second
+
 func initLogger(level string) {
 	var slogLevel slog.Level
 	switch level {
@@ -79,10 +82,17 @@ func main() {
 	userRepository := repository.NewUserRepository(db)
 	sessionRepository := repository.NewSessionRepository(db)
 	ingredientService := services.NewIngredientService(ingredientRepository)
-	authService := services.NewAuthService(userRepository, sessionRepository, cfg.Auth.AdminEmails)
+	authService := services.NewAuthService(
+		userRepository,
+		sessionRepository,
+		cfg.Auth.AdminEmails,
+		nil,
+		cfg.Auth.GoogleClientID,
+	)
 	ingredientController := handlers.NewIngredientController(ingredientService)
 	authController := handlers.NewAuthController(authService, handlers.NewGoogleOAuthClient(cfg.Auth), cfg.Auth)
 	healthController := handlers.NewHealthController(db)
+	runSessionCleanup(authService)
 
 	app := router.New(router.Dependencies{
 		HealthController:     healthController,
@@ -95,5 +105,31 @@ func main() {
 	if err := app.Run(cfg.HTTPAddr); err != nil {
 		slog.Error("ошибка запуска HTTP-сервера", "err", err)
 		os.Exit(1)
+	}
+}
+
+func runSessionCleanup(authService services.AuthService) {
+	cleanupSessions(authService)
+
+	go func() {
+		ticker := time.NewTicker(sessionCleanupInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			cleanupSessions(authService)
+		}
+	}()
+}
+
+func cleanupSessions(authService services.AuthService) {
+	ctx, cancel := context.WithTimeout(context.Background(), sessionCleanupTimeout)
+	defer cancel()
+
+	deleted, err := authService.CleanupExpiredOrRevokedSessions(ctx, time.Now().UTC())
+	if err != nil {
+		slog.Error("ошибка очистки сессий", "err", err)
+		return
+	}
+	if deleted > 0 {
+		slog.Info("очищены просроченные или отозванные сессии", "deleted", deleted)
 	}
 }

@@ -134,7 +134,7 @@ export interface paths {
         put?: never;
         /**
          * Создать ингредиент
-         * @description Права (этап 1): только `admin`.
+         * @description Права: только `admin`.
          */
         post: operations["createIngredient"];
         delete?: never;
@@ -165,7 +165,7 @@ export interface paths {
          * @description При использовании ингредиента в рецептах возвращается `409 RESOURCE_IN_USE`
          *     (реальные FK появятся вместе с recipes).
          *
-         *     Права (этап 1): только `admin`.
+         *     Права: только `admin`.
          */
         delete: operations["deleteIngredient"];
         options?: never;
@@ -176,7 +176,7 @@ export interface paths {
          *     Необходимо передать хотя бы одно изменяемое поле помимо `version`.
          *     Пустой body `{}` или только `{"version": N}` — `VALIDATION_ERROR`.
          *
-         *     Права (этап 1): только `admin`.
+         *     Права: только `admin`.
          */
         patch: operations["updateIngredient"];
         trace?: never;
@@ -199,7 +199,7 @@ export interface paths {
         /**
          * Загрузить иконку ингредиента
          * @description Сырое тело файла (PNG или JPEG), максимум 512 KB.
-         *     Права (этап 1): только `admin`.
+         *     Права: только `admin`.
          */
         put: operations["putIngredientIcon"];
         post?: never;
@@ -326,7 +326,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Требуется аутентификация (`UNAUTHORIZED`). Enforcement с этапа 1. */
+        /** @description Требуется аутентификация (`UNAUTHORIZED`). */
         Unauthorized: {
             headers: {
                 "X-Request-ID": components["headers"]["XRequestID"];
@@ -345,7 +345,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Недостаточно прав (`FORBIDDEN`). Enforcement с этапа 1. */
+        /** @description Недостаточно прав (`FORBIDDEN`). */
         Forbidden: {
             headers: {
                 "X-Request-ID": components["headers"]["XRequestID"];

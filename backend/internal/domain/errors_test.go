@@ -113,6 +113,42 @@ func TestDomainErrors_IsAsAndMessage(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:     "Unauthorized",
+			newErr:   domain.NewErrUnauthorized,
+			sentinel: domain.ErrUnauthorized,
+			checkAs: func(t *testing.T, err error, wantMsg string) {
+				t.Helper()
+				var target *domain.UnauthorizedError
+				if !errors.As(err, &target) || target.Message != wantMsg {
+					t.Fatalf("errors.As → UnauthorizedError: got %+v, want Message=%q", target, wantMsg)
+				}
+			},
+		},
+		{
+			name:     "Forbidden",
+			newErr:   domain.NewErrForbidden,
+			sentinel: domain.ErrForbidden,
+			checkAs: func(t *testing.T, err error, wantMsg string) {
+				t.Helper()
+				var target *domain.ForbiddenError
+				if !errors.As(err, &target) || target.Message != wantMsg {
+					t.Fatalf("errors.As → ForbiddenError: got %+v, want Message=%q", target, wantMsg)
+				}
+			},
+		},
+		{
+			name:     "InvalidAuthData",
+			newErr:   domain.NewErrInvalidAuthData,
+			sentinel: domain.ErrInvalidAuthData,
+			checkAs: func(t *testing.T, err error, wantMsg string) {
+				t.Helper()
+				var target *domain.InvalidAuthDataError
+				if !errors.As(err, &target) || target.Message != wantMsg {
+					t.Fatalf("errors.As → InvalidAuthDataError: got %+v, want Message=%q", target, wantMsg)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

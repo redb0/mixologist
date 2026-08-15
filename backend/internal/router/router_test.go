@@ -1,0 +1,134 @@
+package router
+
+import (
+	"testing"
+	"time"
+
+	"github.com/redb0/mixologist/internal/config"
+	"github.com/redb0/mixologist/internal/handlers"
+	"github.com/redb0/mixologist/internal/services"
+)
+
+func TestNew_RequiresDependencies(t *testing.T) {
+	tests := []struct {
+		name string
+		deps Dependencies
+	}{
+		{
+			name: "missing auth service",
+			deps: Dependencies{
+				HealthController:     &handlers.HealthController{},
+				IngredientController: &handlers.IngredientController{},
+				AuthConfig:           testAuthConfig(),
+			},
+		},
+		{
+			name: "missing session cookie name",
+			deps: Dependencies{
+				HealthController:     &handlers.HealthController{},
+				IngredientController: &handlers.IngredientController{},
+				AuthService:          services.NewAuthService(nil, nil, nil, nil, ""),
+				AuthConfig: config.AuthConfig{
+					SessionCookieName:   "",
+					CSRFHeaderName:      "X-CSRF-Token",
+					CSRFSecret:          "csrf_secret",
+					SessionCookieSecret: "session_secret",
+					CSRFCookieName:      "csrf_name",
+				},
+			},
+		},
+		{
+			name: "missing csrf header",
+			deps: Dependencies{
+				HealthController:     &handlers.HealthController{},
+				IngredientController: &handlers.IngredientController{},
+				AuthService:          services.NewAuthService(nil, nil, nil, nil, ""),
+				AuthConfig: config.AuthConfig{
+					SessionCookieName:   "session",
+					CSRFHeaderName:      "",
+					CSRFSecret:          "csrf_secret",
+					SessionCookieSecret: "session_secret",
+					CSRFCookieName:      "csrf_name",
+				},
+			},
+		},
+		{
+			name: "missing csrf secret",
+			deps: Dependencies{
+				HealthController:     &handlers.HealthController{},
+				IngredientController: &handlers.IngredientController{},
+				AuthService:          services.NewAuthService(nil, nil, nil, nil, ""),
+				AuthConfig: config.AuthConfig{
+					SessionCookieName:   "session",
+					CSRFHeaderName:      "X-CSRF-Token",
+					CSRFSecret:          "",
+					SessionCookieSecret: "session_secret",
+					CSRFCookieName:      "csrf_name",
+				},
+			},
+		},
+		{
+			name: "missing csrf cookie name",
+			deps: Dependencies{
+				HealthController:     &handlers.HealthController{},
+				IngredientController: &handlers.IngredientController{},
+				AuthService:          services.NewAuthService(nil, nil, nil, nil, ""),
+				AuthConfig: config.AuthConfig{
+					SessionCookieName:   "session",
+					CSRFHeaderName:      "X-CSRF-Token",
+					CSRFSecret:          "csrf_secret",
+					SessionCookieSecret: "session_secret",
+					CSRFCookieName:      "",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("expected panic")
+				}
+			}()
+			_ = New(tt.deps)
+		})
+	}
+}
+
+func TestNew_BuildsRouterWhenDependenciesAreValid(t *testing.T) {
+	deps := Dependencies{
+		HealthController:     &handlers.HealthController{},
+		IngredientController: &handlers.IngredientController{},
+		AuthController: handlers.NewAuthController(
+			services.NewAuthService(nil, nil, nil, nil, ""),
+			handlers.NewGoogleOAuthClient(testGoogleAuthConfig()),
+			testGoogleAuthConfig(),
+		),
+		AuthService: services.NewAuthService(nil, nil, nil, nil, ""),
+		AuthConfig:  testAuthConfig(),
+	}
+
+	if New(deps) == nil {
+		t.Fatal("expected router instance")
+	}
+}
+
+func testGoogleAuthConfig() config.AuthConfig {
+	cfg := testAuthConfig()
+	cfg.GoogleClientID = "google-client-id"
+	cfg.GoogleClientSecret = "google-client-secret"
+	cfg.GoogleCallbackURL = "http://localhost:8080/api/v1/auth/google/callback"
+	return cfg
+}
+
+func testAuthConfig() config.AuthConfig {
+	return config.AuthConfig{
+		SessionCookieName:   "session",
+		CSRFHeaderName:      "X-CSRF-Token",
+		CSRFCookieName:      "csrf_token",
+		SessionTTL:          time.Hour,
+		CSRFSecret:          "csrf_secret",
+		SessionCookieSecret: "session_secret",
+	}
+}

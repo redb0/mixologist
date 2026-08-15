@@ -36,3 +36,36 @@ COMMENT ON COLUMN ingredients.icon IS 'Иконка ингредиента';
 COMMENT ON COLUMN ingredients.version IS 'Версия ингредиента';
 COMMENT ON COLUMN ingredients.created_at IS 'Дата и время создания ингредиента';
 COMMENT ON COLUMN ingredients.updated_at IS 'Дата и время последнего обновления ингредиента';
+
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    google_subject VARCHAR(255) NOT NULL,
+    email VARCHAR(320) NOT NULL,
+    display_name VARCHAR(255) NOT NULL,
+    avatar_url TEXT NOT NULL DEFAULT '',
+    role VARCHAR(32) NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_login_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX users_google_subject_unique ON users (google_subject);
+
+-- Учитываем регистр email для запрета дублей учетных записей.
+CREATE UNIQUE INDEX users_email_lower_unique ON users (LOWER(email));
+
+CREATE TABLE sessions (
+    id SERIAL PRIMARY KEY,
+    token_hash VARCHAR(255) NOT NULL,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked_at TIMESTAMPTZ DEFAULT NULL,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX sessions_token_hash_unique ON sessions (token_hash);
+CREATE INDEX sessions_user_id_idx ON sessions (user_id);
+CREATE INDEX sessions_expires_at_idx ON sessions (expires_at);
+CREATE INDEX sessions_revoked_at_idx ON sessions (revoked_at) WHERE revoked_at IS NOT NULL;

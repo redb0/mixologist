@@ -11,18 +11,21 @@ info:
     Внешний API версионирован через префикс `/api/v1`. Operational health (`GET /health`)
     остаётся вне продуктового контракта.
 
-    Auth (cookie session) описан как future security scheme; enforcement появится в этапе 1.
-    До этапа 1 endpoints доступны без аутентификации.
+    Авторизация — Google OAuth на backend, opaque HttpOnly cookie-сессия.
+    Mutating API с cookie-сессией защищается CSRF-заголовком `X-CSRF-Token`.
+    Чтение ingredients публичное; мутации ingredients — только `admin`.
 servers:
   - url: /
     description: Same-origin (Vite/nginx proxy или backend)
 security:
-  # CookieSession опционален до этапа 1 (`{}` = без auth).
+  # CookieSession опционален: `{}` = без auth (публичные GET).
   - CookieSession: []
   - {}
 tags:
   - name: health
     description: Operational health (вне `/api/v1`)
+  - name: auth
+    description: Google OAuth, cookie-сессии и текущий пользователь
   - name: ingredients
     description: CRUD ингредиентов и иконок
 paths:
@@ -56,6 +59,152 @@ paths:
               example:
                 status: unavailable
 
+  /api/v1/auth/google/login:
+    get:
+      operationId: startGoogleLogin
+      tags: [auth]
+      summary: Начать вход через Google OAuth
+      description: |
+        Генерирует `state`/`nonce`, сохраняет их в короткоживущей cookie и
+        перенаправляет браузер на Google OAuth consent screen.
+
+        После успешного входа Google вернёт пользователя на
+        `GET /api/v1/auth/google/callback`. Опциональный `return_to` задаёт
+        относительный путь внутри приложения для редиректа после callback
+        (default — `/`).
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/AuthReturnTo"
+      responses:
+        "302":
+          description: Redirect на Google OAuth
+          headers:
+            Location:
+              description: URL Google OAuth authorization endpoint
+              required: true
+              schema:
+                type: string
+                format: uri
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
+            Set-Cookie:
+              description: Короткоживущая cookie с OAuth `state`/`nonce`
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/auth/google/callback:
+    get:
+      operationId: handleGoogleCallback
+      tags: [auth]
+      summary: Callback Google OAuth
+      description: |
+        Принимает `code` и `state` от Google, проверяет `state`/`nonce`,
+        обменивает code на identity token, валидирует issuer/audience/expiry
+        и обязательные claims, создаёт/обновляет пользователя и сессию,
+        выставляет HttpOnly session cookie и перенаправляет на `return_to`.
+        Ошибки OAuth, identity и сессии перенаправляют браузер на
+        `/auth/error?code=&message=`, а не отдают JSON.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/OAuthCode"
+        - $ref: "#/components/parameters/OAuthState"
+        - $ref: "#/components/parameters/OAuthError"
+      responses:
+        "302":
+          description: |
+            Успешный вход — redirect на `return_to`.
+            Ошибка callback — redirect на `/auth/error?code=&message=`
+            (`OAUTH_STATE_INVALID`, `OAUTH_CALLBACK_FAILED`, `UNAUTHORIZED`,
+            `INTERNAL_ERROR`, `SERVICE_UNAVAILABLE`).
+          headers:
+            Location:
+              description: |
+                Относительный путь внутри приложения: `return_to` при успехе
+                или `/auth/error` при ошибке OAuth/identity.
+              required: true
+              schema:
+                type: string
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
+            Set-Cookie:
+              description: |
+                При успехе — HttpOnly session cookie, CSRF cookie и очистка OAuth state cookie.
+                При ошибке — очистка OAuth state cookie.
+              schema:
+                type: string
+
+  /api/v1/auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Текущий пользователь
+      description: |
+        Возвращает профиль пользователя из валидной session cookie.
+        Без cookie или с истекшей/отозванной сессией — `401 UNAUTHORIZED`.
+      responses:
+        "200":
+          description: Текущий пользователь
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentUser"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Выход
+      description: |
+        Отзывает текущую сессию в БД и очищает session/CSRF cookies.
+        Для mutating запросов с cookie-сессией требуется CSRF-заголовок.
+      parameters:
+        - $ref: "#/components/parameters/CSRFToken"
+      responses:
+        "204":
+          description: Сессия отозвана
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
+            Set-Cookie:
+              description: Очистка session и CSRF cookies
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Недостаточно прав или невалидный CSRF token (`CSRF_TOKEN_INVALID`)
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: CSRF_TOKEN_INVALID
+                  message: Некорректный CSRF token
+                  request_id: 550e8400-e29b-41d4-a716-446655440000
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/v1/ingredients:
     get:
       operationId: listIngredients
@@ -69,7 +218,8 @@ paths:
         `totalSize` — точное число записей после фильтров, до ограничения текущей страницы.
         Пустая строка `nextPageToken` означает отсутствие следующей страницы.
 
-        Права (этап 1): `user` или `admin`.
+        Публичный endpoint: аутентификация не требуется.
+      security: []
       parameters:
         - $ref: "#/components/parameters/PageSize"
         - $ref: "#/components/parameters/PageToken"
@@ -90,10 +240,6 @@ paths:
                 $ref: "#/components/schemas/IngredientListResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalError"
         "503":
@@ -104,7 +250,11 @@ paths:
       tags: [ingredients]
       summary: Создать ингредиент
       description: |
-        Права (этап 1): только `admin`.
+        Права: только `admin`.
+      security:
+        - CookieSession: []
+      parameters:
+        - $ref: "#/components/parameters/CSRFToken"
       requestBody:
         required: true
         content:
@@ -142,7 +292,8 @@ paths:
       tags: [ingredients]
       summary: Получить ингредиент по ID
       description: |
-        Права (этап 1): `user` или `admin`.
+        Публичный endpoint: аутентификация не требуется.
+      security: []
       responses:
         "200":
           description: Ингредиент найден
@@ -155,10 +306,6 @@ paths:
                 $ref: "#/components/schemas/Ingredient"
         "400":
           $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
@@ -175,7 +322,11 @@ paths:
         Необходимо передать хотя бы одно изменяемое поле помимо `version`.
         Пустой body `{}` или только `{"version": N}` — `VALIDATION_ERROR`.
 
-        Права (этап 1): только `admin`.
+        Права: только `admin`.
+      security:
+        - CookieSession: []
+      parameters:
+        - $ref: "#/components/parameters/CSRFToken"
       requestBody:
         required: true
         content:
@@ -215,7 +366,11 @@ paths:
         При использовании ингредиента в рецептах возвращается `409 RESOURCE_IN_USE`
         (реальные FK появятся вместе с recipes).
 
-        Права (этап 1): только `admin`.
+        Права: только `admin`.
+      security:
+        - CookieSession: []
+      parameters:
+        - $ref: "#/components/parameters/CSRFToken"
       responses:
         "204":
           description: Ингредиент удалён
@@ -245,7 +400,8 @@ paths:
       tags: [ingredients]
       summary: Получить иконку ингредиента
       description: |
-        Права (этап 1): `user` или `admin`.
+        Публичный endpoint: аутентификация не требуется.
+      security: []
       responses:
         "200":
           description: Бинарная иконка (PNG или JPEG)
@@ -273,10 +429,6 @@ paths:
                 format: binary
         "400":
           $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
@@ -290,7 +442,11 @@ paths:
       summary: Загрузить иконку ингредиента
       description: |
         Сырое тело файла (PNG или JPEG), максимум 512 KB.
-        Права (этап 1): только `admin`.
+        Права: только `admin`.
+      security:
+        - CookieSession: []
+      parameters:
+        - $ref: "#/components/parameters/CSRFToken"
       requestBody:
         required: true
         content:
@@ -325,9 +481,12 @@ components:
       in: cookie
       name: session
       description: |
-        Будущая cookie-сессия после Google OAuth (этап 1).
-        В OpenAPI зафиксирована заранее; enforcement до этапа 1 не включается.
-        Роли: чтение (`GET`) — `user`/`admin`; мутации — только `admin`.
+        Opaque HttpOnly cookie-сессия после Google OAuth.
+        Чтение ingredients публичное; мутации ingredients — только `admin`.
+        Mutating запросы (`POST`, `PUT`, `PATCH`, `DELETE`) с cookie-сессией
+        дополнительно требуют CSRF-заголовок `X-CSRF-Token`. Токен выпускается
+        сервером (HMAC от session token и часового timestamp), отдаётся клиенту
+        в CSRF cookie и проверяется по заголовку в окне жизни сессии (`SESSION_TTL`).
 
   headers:
     XRequestID:
@@ -341,6 +500,61 @@ components:
         maxLength: 128
 
   parameters:
+    AuthReturnTo:
+      name: return_to
+      in: query
+      required: false
+      description: |
+        Относительный путь внутри приложения для редиректа после успешного входа.
+        Должен начинаться с одного `/`, не начинаться с `//` (protocol-relative URL)
+        и не содержать scheme/host. Default — `/`.
+      schema:
+        type: string
+        pattern: '^/(?:$|[^/\s][^\s]*)$'
+        maxLength: 2048
+        default: /
+
+    OAuthCode:
+      name: code
+      in: query
+      required: false
+      description: Authorization code от Google (при успешном callback)
+      schema:
+        type: string
+        minLength: 1
+
+    OAuthState:
+      name: state
+      in: query
+      required: false
+      description: OAuth state, должен совпасть со значением из login flow
+      schema:
+        type: string
+        minLength: 1
+
+    OAuthError:
+      name: error
+      in: query
+      required: false
+      description: Код ошибки от Google при отказе пользователя или сбое OAuth
+      schema:
+        type: string
+        minLength: 1
+
+    CSRFToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: |
+        CSRF token для mutating запросов с cookie-сессией.
+        Выпускается сервером (HMAC от session token и часового timestamp),
+        отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+        Токен принимается в окне жизни сессии (`SESSION_TTL`); cookie Max-Age
+        совпадает с TTL сессии и обновляется на аутентифицированных запросах.
+      schema:
+        type: string
+        minLength: 1
+
     IngredientID:
       name: id
       in: path
@@ -460,7 +674,7 @@ components:
                   request_id: 550e8400-e29b-41d4-a716-446655440000
 
     Unauthorized:
-      description: Требуется аутентификация (`UNAUTHORIZED`). Enforcement с этапа 1.
+      description: Требуется аутентификация (`UNAUTHORIZED`).
       headers:
         X-Request-ID:
           $ref: "#/components/headers/XRequestID"
@@ -475,7 +689,7 @@ components:
               request_id: 550e8400-e29b-41d4-a716-446655440000
 
     Forbidden:
-      description: Недостаточно прав (`FORBIDDEN`). Enforcement с этапа 1.
+      description: Недостаточно прав (`FORBIDDEN`).
       headers:
         X-Request-ID:
           $ref: "#/components/headers/XRequestID"
@@ -578,6 +792,33 @@ components:
           type: string
           enum: [ok, unavailable]
 
+    UserRole:
+      type: string
+      enum: [admin, user]
+      description: Роль пользователя; `admin` назначается через email allowlist
+
+    CurrentUser:
+      type: object
+      additionalProperties: false
+      required: [id, email, display_name, role]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 256
+        avatar_url:
+          type: string
+          format: uri
+          description: URL аватара из Google profile; отсутствует, если Google не вернул picture
+        role:
+          $ref: "#/components/schemas/UserRole"
+
     UnitMeasurement:
       type: string
       enum: [мл, гр, шт, дэш]
@@ -622,6 +863,9 @@ components:
         - RESOURCE_IN_USE
         - UNAUTHORIZED
         - FORBIDDEN
+        - OAUTH_STATE_INVALID
+        - OAUTH_CALLBACK_FAILED
+        - CSRF_TOKEN_INVALID
         - INTERNAL_ERROR
         - SERVICE_UNAVAILABLE
 

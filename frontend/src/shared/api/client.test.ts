@@ -59,4 +59,21 @@ describe("ApiError parsing", () => {
     await expect(apiRequest<void>("/ingredients/1")).resolves.toBeUndefined();
     globalThis.fetch = originalFetch;
   });
+
+  it("добавляет CSRF-заголовок к mutating-запросам из cookie", async () => {
+    const { apiRequest, CSRF_HEADER_NAME } = await import("./client");
+    const originalFetch = globalThis.fetch;
+    document.cookie = "csrf_token=signed-csrf";
+    let header: string | null = null;
+    globalThis.fetch = async (_input, init) => {
+      header = new Headers(init?.headers).get(CSRF_HEADER_NAME);
+      return new Response(null, { status: 204 });
+    };
+
+    await apiRequest<void>("/auth/logout", { method: "POST" });
+    expect(header).toBe("signed-csrf");
+    globalThis.fetch = originalFetch;
+    document.cookie =
+      "csrf_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+  });
 });

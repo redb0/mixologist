@@ -1,4 +1,8 @@
 export const API_BASE_URL = "/api/v1";
+export const CSRF_COOKIE_NAME = "csrf_token";
+export const CSRF_HEADER_NAME = "X-CSRF-Token";
+
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export type ErrorDetail = {
   field: string;
@@ -54,12 +58,39 @@ export function buildQueryString(
   return query ? `?${query}` : "";
 }
 
+function readCookie(name: string): string | undefined {
+  if (typeof document === "undefined") {
+    return undefined;
+  }
+  const prefix = `${name}=`;
+  for (const part of document.cookie.split(";")) {
+    const cookie = part.trim();
+    if (cookie.startsWith(prefix)) {
+      return decodeURIComponent(cookie.slice(prefix.length));
+    }
+  }
+  return undefined;
+}
+
+function withCsrfHeaders(init?: RequestInit): Headers {
+  const headers = new Headers(init?.headers);
+  const method = (init?.method ?? "GET").toUpperCase();
+  if (MUTATING_METHODS.has(method) && !headers.has(CSRF_HEADER_NAME)) {
+    const token = readCookie(CSRF_COOKIE_NAME);
+    if (token) {
+      headers.set(CSRF_HEADER_NAME, token);
+    }
+  }
+  return headers;
+}
+
 export async function apiRequest<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
+    headers: withCsrfHeaders(init),
     credentials: "include",
   });
 

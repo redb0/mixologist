@@ -6,9 +6,9 @@ import (
 
 	"github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
-)
 
-const internalErrorMessage = "Внутренняя ошибка сервера"
+	"github.com/redb0/mixologist/internal/httperr"
+)
 
 func Recovery() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -17,13 +17,12 @@ func Recovery() gin.HandlerFunc {
 				requestID := requestid.Get(c)
 				slog.Error("panic recovered", "err", err, "request_id", requestID)
 				c.Header(RequestIDHeader, requestID)
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-					"error": gin.H{
-						"code":       "INTERNAL_ERROR",
-						"message":    internalErrorMessage,
-						"request_id": requestID,
-					},
-				})
+				httperr.Abort(
+					c,
+					http.StatusInternalServerError,
+					httperr.CodeInternalError,
+					httperr.InternalServerErrorMessage,
+				)
 			}
 		}()
 		c.Next()

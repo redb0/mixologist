@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"encoding/base64"
+
 	"github.com/redb0/mixologist/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,6 +78,50 @@ func TestDecodePageToken_SortMismatch(t *testing.T) {
 	params := domain.IngredientListParams{PageSize: 25, Sort: domain.ByCreatedAt, Order: domain.Desc}
 	item := domain.Ingredient{ID: 1, Name: "A", CreatedAt: time.Now().UTC()}
 	token := EncodePageToken(domain.ByName, domain.Asc, params.PageSize, item)
+
+	_, err := DecodePageToken(token, params)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrInvalidPageToken)
+}
+
+func TestDecodePageToken_InvalidBase64(t *testing.T) {
+	params := domain.IngredientListParams{PageSize: 25, Sort: domain.ByCreatedAt, Order: domain.Desc}
+	_, err := DecodePageToken(domain.IngredientPageToken("%%%"), params)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrInvalidPageToken)
+}
+
+func TestDecodePageToken_InvalidJSON(t *testing.T) {
+	params := domain.IngredientListParams{PageSize: 25, Sort: domain.ByCreatedAt, Order: domain.Desc}
+	_, err := DecodePageToken(domain.IngredientPageToken("not-json"), params)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrInvalidPageToken)
+}
+
+func TestDecodePageToken_OrderMismatch(t *testing.T) {
+	params := domain.IngredientListParams{PageSize: 25, Sort: domain.ByCreatedAt, Order: domain.Desc}
+	item := domain.Ingredient{ID: 1, CreatedAt: time.Now().UTC()}
+	token := EncodePageToken(domain.ByCreatedAt, domain.Asc, params.PageSize, item)
+
+	_, err := DecodePageToken(token, params)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrInvalidPageToken)
+}
+
+func TestDecodePageToken_InvalidVersion(t *testing.T) {
+	params := domain.IngredientListParams{PageSize: 25, Sort: domain.ByCreatedAt, Order: domain.Desc}
+	raw := []byte(`{"v":2,"sort":"created_at","order":"desc","page_size":25,"id":1,"created_at":"2026-01-01T00:00:00Z"}`)
+	token := domain.IngredientPageToken(base64.RawURLEncoding.EncodeToString(raw))
+
+	_, err := DecodePageToken(token, params)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrInvalidPageToken)
+}
+
+func TestDecodePageToken_MissingCursorFields(t *testing.T) {
+	params := domain.IngredientListParams{PageSize: 25, Sort: domain.ByName, Order: domain.Asc}
+	raw := []byte(`{"v":1,"sort":"name","order":"asc","page_size":25,"id":1}`)
+	token := domain.IngredientPageToken(base64.RawURLEncoding.EncodeToString(raw))
 
 	_, err := DecodePageToken(token, params)
 	require.Error(t, err)

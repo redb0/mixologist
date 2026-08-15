@@ -21,6 +21,99 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/google/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Начать вход через Google OAuth
+         * @description Генерирует `state`/`nonce`, сохраняет их в короткоживущей cookie и
+         *     перенаправляет браузер на Google OAuth consent screen.
+         *
+         *     После успешного входа Google вернёт пользователя на
+         *     `GET /api/v1/auth/google/callback`. Опциональный `return_to` задаёт
+         *     относительный путь внутри приложения для редиректа после callback
+         *     (default — `/`).
+         */
+        get: operations["startGoogleLogin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/google/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Callback Google OAuth
+         * @description Принимает `code` и `state` от Google, проверяет `state`/`nonce`,
+         *     обменивает code на identity token, валидирует issuer/audience/expiry
+         *     и обязательные claims, создаёт/обновляет пользователя и сессию,
+         *     выставляет HttpOnly session cookie и перенаправляет на `return_to`.
+         *     Ошибки OAuth, identity и сессии перенаправляют браузер на
+         *     `/auth/error?code=&message=`, а не отдают JSON.
+         */
+        get: operations["handleGoogleCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Текущий пользователь
+         * @description Возвращает профиль пользователя из валидной session cookie.
+         *     Без cookie или с истекшей/отозванной сессией — `401 UNAUTHORIZED`.
+         */
+        get: operations["getCurrentUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Выход
+         * @description Отзывает текущую сессию в БД и очищает session/CSRF cookies.
+         *     Для mutating запросов с cookie-сессией требуется CSRF-заголовок.
+         */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ingredients": {
         parameters: {
             query?: never;
@@ -37,13 +130,13 @@ export interface paths {
          *     `totalSize` — точное число записей после фильтров, до ограничения текущей страницы.
          *     Пустая строка `nextPageToken` означает отсутствие следующей страницы.
          *
-         *     Права (этап 1): `user` или `admin`.
+         *     Публичный endpoint: аутентификация не требуется.
          */
         get: operations["listIngredients"];
         put?: never;
         /**
          * Создать ингредиент
-         * @description Права (этап 1): только `admin`.
+         * @description Права: только `admin`.
          */
         post: operations["createIngredient"];
         delete?: never;
@@ -64,7 +157,7 @@ export interface paths {
         };
         /**
          * Получить ингредиент по ID
-         * @description Права (этап 1): `user` или `admin`.
+         * @description Публичный endpoint: аутентификация не требуется.
          */
         get: operations["getIngredient"];
         put?: never;
@@ -74,7 +167,7 @@ export interface paths {
          * @description При использовании ингредиента в рецептах возвращается `409 RESOURCE_IN_USE`
          *     (реальные FK появятся вместе с recipes).
          *
-         *     Права (этап 1): только `admin`.
+         *     Права: только `admin`.
          */
         delete: operations["deleteIngredient"];
         options?: never;
@@ -85,7 +178,7 @@ export interface paths {
          *     Необходимо передать хотя бы одно изменяемое поле помимо `version`.
          *     Пустой body `{}` или только `{"version": N}` — `VALIDATION_ERROR`.
          *
-         *     Права (этап 1): только `admin`.
+         *     Права: только `admin`.
          */
         patch: operations["updateIngredient"];
         trace?: never;
@@ -102,13 +195,13 @@ export interface paths {
         };
         /**
          * Получить иконку ингредиента
-         * @description Права (этап 1): `user` или `admin`.
+         * @description Публичный endpoint: аутентификация не требуется.
          */
         get: operations["getIngredientIcon"];
         /**
          * Загрузить иконку ингредиента
          * @description Сырое тело файла (PNG или JPEG), максимум 512 KB.
-         *     Права (этап 1): только `admin`.
+         *     Права: только `admin`.
          */
         put: operations["putIngredientIcon"];
         post?: never;
@@ -126,6 +219,23 @@ export interface components {
             /** @enum {string} */
             status: "ok" | "unavailable";
         };
+        /**
+         * @description Роль пользователя; `admin` назначается через email allowlist
+         * @enum {string}
+         */
+        UserRole: "admin" | "user";
+        CurrentUser: {
+            id: number;
+            /** Format: email */
+            email: string;
+            display_name: string;
+            /**
+             * Format: uri
+             * @description URL аватара из Google profile; отсутствует, если Google не вернул picture
+             */
+            avatar_url?: string;
+            role: components["schemas"]["UserRole"];
+        };
         /** @enum {string} */
         UnitMeasurement: "мл" | "гр" | "шт" | "дэш";
         /** @enum {string} */
@@ -140,7 +250,7 @@ export interface components {
          * @description Стабильный машинный код ошибки (uppercase)
          * @enum {string}
          */
-        ErrorCode: "VALIDATION_ERROR" | "INVALID_ID" | "INVALID_PAGE_TOKEN" | "NOT_FOUND" | "ALREADY_EXISTS" | "VERSION_CONFLICT" | "RESOURCE_IN_USE" | "UNAUTHORIZED" | "FORBIDDEN" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE";
+        ErrorCode: "VALIDATION_ERROR" | "INVALID_ID" | "INVALID_PAGE_TOKEN" | "NOT_FOUND" | "ALREADY_EXISTS" | "VERSION_CONFLICT" | "RESOURCE_IN_USE" | "UNAUTHORIZED" | "FORBIDDEN" | "OAUTH_STATE_INVALID" | "OAUTH_CALLBACK_FAILED" | "CSRF_TOKEN_INVALID" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE";
         ErrorDetail: {
             /** @description Имя поля (JSON path или query param) */
             field: string;
@@ -218,7 +328,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Требуется аутентификация (`UNAUTHORIZED`). Enforcement с этапа 1. */
+        /** @description Требуется аутентификация (`UNAUTHORIZED`). */
         Unauthorized: {
             headers: {
                 "X-Request-ID": components["headers"]["XRequestID"];
@@ -237,7 +347,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Недостаточно прав (`FORBIDDEN`). Enforcement с этапа 1. */
+        /** @description Недостаточно прав (`FORBIDDEN`). */
         Forbidden: {
             headers: {
                 "X-Request-ID": components["headers"]["XRequestID"];
@@ -328,6 +438,26 @@ export interface components {
         };
     };
     parameters: {
+        /**
+         * @description Относительный путь внутри приложения для редиректа после успешного входа.
+         *     Должен начинаться с одного `/`, не начинаться с `//` (protocol-relative URL)
+         *     и не содержать scheme/host. Default — `/`.
+         */
+        AuthReturnTo: string;
+        /** @description Authorization code от Google (при успешном callback) */
+        OAuthCode: string;
+        /** @description OAuth state, должен совпасть со значением из login flow */
+        OAuthState: string;
+        /** @description Код ошибки от Google при отказе пользователя или сбое OAuth */
+        OAuthError: string;
+        /**
+         * @description CSRF token для mutating запросов с cookie-сессией.
+         *     Выпускается сервером (HMAC от session token и часового timestamp),
+         *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+         *     Токен принимается в окне жизни сессии (`SESSION_TTL`); cookie Max-Age
+         *     совпадает с TTL сессии и обновляется на аутентифицированных запросах.
+         */
+        CSRFToken: string;
         /** @description Идентификатор ингредиента (положительное целое) */
         IngredientID: number;
         /** @description Размер страницы (1–100). Default — 25. */
@@ -405,6 +535,156 @@ export interface operations {
             };
         };
     };
+    startGoogleLogin: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Относительный путь внутри приложения для редиректа после успешного входа.
+                 *     Должен начинаться с одного `/`, не начинаться с `//` (protocol-relative URL)
+                 *     и не содержать scheme/host. Default — `/`.
+                 */
+                return_to?: components["parameters"]["AuthReturnTo"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect на Google OAuth */
+            302: {
+                headers: {
+                    /** @description URL Google OAuth authorization endpoint */
+                    Location: string;
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    /** @description Короткоживущая cookie с OAuth `state`/`nonce` */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    handleGoogleCallback: {
+        parameters: {
+            query?: {
+                /** @description Authorization code от Google (при успешном callback) */
+                code?: components["parameters"]["OAuthCode"];
+                /** @description OAuth state, должен совпасть со значением из login flow */
+                state?: components["parameters"]["OAuthState"];
+                /** @description Код ошибки от Google при отказе пользователя или сбое OAuth */
+                error?: components["parameters"]["OAuthError"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Успешный вход — redirect на `return_to`.
+             *     Ошибка callback — redirect на `/auth/error?code=&message=`
+             *     (`OAUTH_STATE_INVALID`, `OAUTH_CALLBACK_FAILED`, `UNAUTHORIZED`,
+             *     `INTERNAL_ERROR`, `SERVICE_UNAVAILABLE`).
+             */
+            302: {
+                headers: {
+                    /**
+                     * @description Относительный путь внутри приложения: `return_to` при успехе
+                     *     или `/auth/error` при ошибке OAuth/identity.
+                     */
+                    Location: string;
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    /**
+                     * @description При успехе — HttpOnly session cookie, CSRF cookie и очистка OAuth state cookie.
+                     *     При ошибке — очистка OAuth state cookie.
+                     */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Текущий пользователь */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentUser"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description CSRF token для mutating запросов с cookie-сессией.
+                 *     Выпускается сервером (HMAC от session token и часового timestamp),
+                 *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+                 *     Токен принимается в окне жизни сессии (`SESSION_TTL`); cookie Max-Age
+                 *     совпадает с TTL сессии и обновляется на аутентифицированных запросах.
+                 */
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Сессия отозвана */
+            204: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    /** @description Очистка session и CSRF cookies */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Недостаточно прав или невалидный CSRF token (`CSRF_TOKEN_INVALID`) */
+            403: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "CSRF_TOKEN_INVALID",
+                     *         "message": "Некорректный CSRF token",
+                     *         "request_id": "550e8400-e29b-41d4-a716-446655440000"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     listIngredients: {
         parameters: {
             query?: {
@@ -447,8 +727,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -456,7 +734,16 @@ export interface operations {
     createIngredient: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /**
+                 * @description CSRF token для mutating запросов с cookie-сессией.
+                 *     Выпускается сервером (HMAC от session token и часового timestamp),
+                 *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+                 *     Токен принимается в окне жизни сессии (`SESSION_TTL`); cookie Max-Age
+                 *     совпадает с TTL сессии и обновляется на аутентифицированных запросах.
+                 */
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -507,8 +794,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
@@ -517,7 +802,16 @@ export interface operations {
     deleteIngredient: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /**
+                 * @description CSRF token для mutating запросов с cookie-сессией.
+                 *     Выпускается сервером (HMAC от session token и часового timestamp),
+                 *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+                 *     Токен принимается в окне жизни сессии (`SESSION_TTL`); cookie Max-Age
+                 *     совпадает с TTL сессии и обновляется на аутентифицированных запросах.
+                 */
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+            };
             path: {
                 /** @description Идентификатор ингредиента (положительное целое) */
                 id: components["parameters"]["IngredientID"];
@@ -546,7 +840,16 @@ export interface operations {
     updateIngredient: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /**
+                 * @description CSRF token для mutating запросов с cookie-сессией.
+                 *     Выпускается сервером (HMAC от session token и часового timestamp),
+                 *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+                 *     Токен принимается в окне жизни сессии (`SESSION_TTL`); cookie Max-Age
+                 *     совпадает с TTL сессии и обновляется на аутентифицированных запросах.
+                 */
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+            };
             path: {
                 /** @description Идентификатор ингредиента (положительное целое) */
                 id: components["parameters"]["IngredientID"];
@@ -606,8 +909,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
@@ -616,7 +917,16 @@ export interface operations {
     putIngredientIcon: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /**
+                 * @description CSRF token для mutating запросов с cookie-сессией.
+                 *     Выпускается сервером (HMAC от session token и часового timestamp),
+                 *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+                 *     Токен принимается в окне жизни сессии (`SESSION_TTL`); cookie Max-Age
+                 *     совпадает с TTL сессии и обновляется на аутентифицированных запросах.
+                 */
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+            };
             path: {
                 /** @description Идентификатор ингредиента (положительное целое) */
                 id: components["parameters"]["IngredientID"];

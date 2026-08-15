@@ -88,3 +88,8 @@ func TruncateIngredients(db *sqlx.DB) error {
 	_, err := db.Exec(`TRUNCATE TABLE ingredients RESTART IDENTITY CASCADE`)
 	return err
 }
+
+func TruncateAuthTables(db *sqlx.DB) error {
+	_, err := db.Exec(`TRUNCATE TABLE sessions, users RESTART IDENTITY CASCADE`)
+	return err
+}

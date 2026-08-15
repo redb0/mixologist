@@ -46,4 +46,4 @@ Generated-файл хранится в репозитории. После изм
 
 - Продуктовый API: `/api/v1/...`
 - Operational health: `GET /health` (вне `/api/v1`)
-- Cookie session security scheme описан в spec заранее; enforcement — этап 1
+- Cookie session security scheme и auth endpoints (`/api/v1/auth/*`) описаны в spec и enforced на backend

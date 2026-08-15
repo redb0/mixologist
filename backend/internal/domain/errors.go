@@ -10,6 +10,9 @@ var (
 	ErrResourceInUse      = errors.New("resource in use")
 	ErrInvalidID          = errors.New("invalid id")
 	ErrServiceUnavailable = errors.New("service unavailable")
+	ErrUnauthorized       = errors.New("unauthorized")
+	ErrForbidden          = errors.New("forbidden")
+	ErrInvalidAuthData    = errors.New("invalid auth data")
 
 	ErrInvalidIngredientData = errors.New("invalid ingredient data")
 	ErrInvalidPageToken      = errors.New("invalid page token")
@@ -144,4 +147,52 @@ func (e *ServiceUnavailableError) Unwrap() error {
 
 func NewErrServiceUnavailable(message string) error {
 	return &ServiceUnavailableError{Message: message}
+}
+
+type UnauthorizedError struct {
+	Message string
+}
+
+func (e *UnauthorizedError) Error() string {
+	return e.Message
+}
+
+func (e *UnauthorizedError) Unwrap() error {
+	return ErrUnauthorized
+}
+
+func NewErrUnauthorized(message string) error {
+	return &UnauthorizedError{Message: message}
+}
+
+type ForbiddenError struct {
+	Message string
+}
+
+func (e *ForbiddenError) Error() string {
+	return e.Message
+}
+
+func (e *ForbiddenError) Unwrap() error {
+	return ErrForbidden
+}
+
+func NewErrForbidden(message string) error {
+	return &ForbiddenError{Message: message}
+}
+
+type InvalidAuthDataError struct {
+	Message string
+}
+
+func (e *InvalidAuthDataError) Error() string {
+	return e.Message
+}
+
+func (e *InvalidAuthDataError) Unwrap() error {
+	return ErrInvalidAuthData
+}
+
+func NewErrInvalidAuthData(message string) error {
+	return &InvalidAuthDataError{Message: message}
 }

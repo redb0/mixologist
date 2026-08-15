@@ -6,7 +6,7 @@ extends:
   - recommended
 
 rules:
-  # Auth enforcement появится в этапе 1; scheme зафиксирован заранее.
+  # Auth enforcement появится в этапе 1; scheme и auth endpoints зафиксированы заранее.
   security-defined: off
   # /health — operational endpoint без клиентских 4xx.
   operation-4xx-response: off

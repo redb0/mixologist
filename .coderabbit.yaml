@@ -1,0 +1,29 @@
+language: ru
+reviews:
+  profile: chill
+  high_level_summary: true
+  request_changes_workflow: false
+  path_instructions:
+    - path: "backend/internal/handlers/**"
+      instructions: |
+        Только HTTP: парсинг, валидация, маппинг, response.
+        Запрещены SQL и бизнес-правила.
+    - path: "backend/internal/services/**"
+      instructions: |
+        Бизнес-логика через интерфейсы репозитория.
+        Новая логика без unit-тестов — Major.
+    - path: "backend/internal/repository/**"
+      instructions: |
+        Только БД/SQL. Ошибки нормализовать.
+        Только параметризованные запросы.
+    - path: "backend/**/*_test.go"
+      instructions: |
+        AAA: подготовка, действие, проверка. Table-driven где есть ветки.
+        Нужны happy path, edge и негативные сценарии.
+    - path: "api/openapi.yaml"
+      instructions: |
+        Изменение публичного API должно быть синхронизировано
+        с frontend generated client.
+  auto_review:
+    enabled: true
+    drafts: false

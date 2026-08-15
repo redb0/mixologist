@@ -25,6 +25,7 @@ import {
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
+import { useAuth } from "../features/auth/auth-context";
 import {
   ingredientIconUrl,
   listIngredients,
@@ -85,10 +86,13 @@ const columns: GridColDef<Ingredient>[] = [
         new Date(row.created_at),
       ),
   },
-  {
+];
+
+function buildActionColumn(isAdmin: boolean): GridColDef<Ingredient> {
+  return {
     field: "actions",
     headerName: "Действия",
-    width: 120,
+    width: isAdmin ? 120 : 72,
     sortable: false,
     filterable: false,
     renderCell: ({ row }: GridRenderCellParams<Ingredient>) => (
@@ -102,21 +106,25 @@ const columns: GridColDef<Ingredient>[] = [
             <VisibilityIcon />
           </IconButton>
         </Tooltip>
-        <Tooltip title="Изменить">
-          <IconButton
-            component={RouterLink}
-            to={`/ingredients/${row.id}/edit`}
-            aria-label="Изменить"
-          >
-            <EditIcon />
-          </IconButton>
-        </Tooltip>
+        {isAdmin ? (
+          <Tooltip title="Изменить">
+            <IconButton
+              component={RouterLink}
+              to={`/ingredients/${row.id}/edit`}
+              aria-label="Изменить"
+            >
+              <EditIcon />
+            </IconButton>
+          </Tooltip>
+        ) : null}
       </Stack>
     ),
-  },
-];
+  };
+}
 
 export function IngredientsListPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [nameFilter, setNameFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState<IngredientType | "">("");
   const [abvFilter, setAbvFilter] = useState<Abv | "">("");
@@ -190,6 +198,10 @@ export function IngredientsListPage() {
   };
 
   const apiError = query.error instanceof ApiError ? query.error : undefined;
+  const gridColumns = useMemo(
+    () => [...columns, buildActionColumn(isAdmin)],
+    [isAdmin],
+  );
 
   return (
     <Stack spacing={3}>
@@ -202,18 +214,22 @@ export function IngredientsListPage() {
             Ингредиенты
           </Typography>
           <Typography color="text.secondary">
-            Создание и управление ингредиентами каталога
+            {isAdmin
+              ? "Создание и управление ингредиентами каталога"
+              : "Просмотр каталога ингредиентов"}
           </Typography>
         </Box>
-        <Button
-          component={RouterLink}
-          to="/ingredients/new"
-          variant="contained"
-          startIcon={<AddIcon />}
-          sx={{ alignSelf: { xs: "stretch", sm: "center" } }}
-        >
-          Добавить ингредиент
-        </Button>
+        {isAdmin ? (
+          <Button
+            component={RouterLink}
+            to="/ingredients/new"
+            variant="contained"
+            startIcon={<AddIcon />}
+            sx={{ alignSelf: { xs: "stretch", sm: "center" } }}
+          >
+            Добавить ингредиент
+          </Button>
+        ) : null}
       </Stack>
 
       <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
@@ -263,7 +279,7 @@ export function IngredientsListPage() {
       <Box sx={{ height: 580, width: "100%" }}>
         <DataGrid
           rows={query.data?.ingredients ?? []}
-          columns={columns}
+          columns={gridColumns}
           loading={query.isLoading}
           disableRowSelectionOnClick
           paginationMode="server"

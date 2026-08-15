@@ -65,6 +65,25 @@ cp .env.example .env
 
 В `.env` задаётся `DB_URL` — строка подключения для миграций (используется `make`).
 
+Для auth (Google OAuth, cookie-сессии, CSRF) также нужны переменные из
+[`.env.example`](.env.example): `GOOGLE_OAUTH_*`, `AUTH_ADMIN_EMAILS`,
+`SESSION_COOKIE_*`, `SESSION_TTL`, `CSRF_*`. Реальные секреты не коммитьте;
+в Docker Compose используются dev-placeholder значения, если переменные не заданы.
+
+Подробнее о ролях, cookies и sequence flow — в [ARCH.md](ARCH.md#авторизация).
+
+### Настройка Google OAuth
+
+1. Создайте OAuth 2.0 Client (Web application) в [Google Cloud Console](https://console.cloud.google.com/).
+2. Добавьте **Authorized redirect URI**:
+   - Docker / production-like: `http://localhost:8080/api/v1/auth/google/callback`
+   - Vite dev: `http://localhost:5173/api/v1/auth/google/callback`
+3. Скопируйте Client ID и Client Secret в `.env`.
+4. Задайте `AUTH_ADMIN_EMAILS` — список email администраторов разделенных запятыми.
+5. Сгенерируйте случайные `SESSION_COOKIE_SECRET` и `CSRF_SECRET` (минимум 32 символа каждый).
+
+После входа admin попадает в `/ingredients`, обычный пользователь — на `/`.
+
 ### 3. Миграции
 
 Примените миграции (см. раздел [Миграции](#миграции)).
@@ -78,19 +97,14 @@ go run ./cmd/api
 
 Сервер поднимается по адресу `http://localhost:8080`.
 
-Проверка:
+Проверка (публичный endpoint):
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/ingredients \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Джин",
-    "description": "London dry gin",
-    "unit_measurement": "мл",
-    "abv": "крепкий",
-    "ingredient_type": "крепкая часть"
-  }'
+curl http://localhost:8080/api/v1/ingredients
 ```
+
+Создание и изменение ингредиентов требуют admin-сессию (HttpOnly cookie) и заголовок
+`X-CSRF-Token` — см. [ARCH.md](ARCH.md#авторизация).
 
 ### 5. Запуск административного frontend
 
@@ -174,45 +188,3 @@ npm test
 npm run build
 npm run api:check
 ```
-
-## TODO
-
-- [x] GET для ингридиента:
-  - [x] API
-  - [x] Тесты
-- [x] PATCH для ингридиента:
-  - [x] API
-  - [x] Тесты
-- [x] DELETE для ингридиента
-  - [x] API
-  - [x] Тесты
-- [x] Эндпоинт добавления иконки:
-  - [x] API
-  - [x] Тесты
-- [x] Эндпоинт получения иконки:
-  - [x] API
-  - [x] Тесты
-- [x] Эндпоинт получения списка ингридиентов:
-  - [x] API
-  - [x] Тесты
-- [x] Добавить поле `has_icon` в ингредиент для обозначения наличия иконки
-- [x] Маппинг ошибок в HTTP
-- [x] Логирование ошибок и отдача клиенту ошибок без внутренних деталей
-- [x] Тесты на парсинг ошибок
-- [x] Интеграционные тесты на HTTP обработчик
-- [x] Тесты сервиса ингредиентов
-- [x] Тесты репозитория ингредиентов
-- [x] Тесты валидации перечислений
-- [x] Административный frontend ингредиентов
-- [x] Dockerfile для frontend и backend
-- [x] Docker Compose для PostgreSQL, миграций, backend и frontend
-
-Тех. долг:
-
-- [x] При получении ингредиента иконка загружается целиком, хотя нужен только флаг
-- [x] Конкурентное обновление ингредиента (optimistic locking через `version`)
-- [x] Пагинация списка ингридиентов через keyset `pageToken`/`pageSize`
-- [x] Фильтрация ингридиентов (`name`, `abv`, `ingredient_type`)
-- [x] Парсинг ошибок в List репозитория ингридиентов
-- [ ] Добавить таймзону UTC к полю `created_at` ингридиента
-- [ ] Кеширование ингридиентов?

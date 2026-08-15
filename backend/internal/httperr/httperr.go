@@ -1,4 +1,4 @@
-package handlers
+package httperr
 
 import (
 	"errors"
@@ -10,7 +10,7 @@ import (
 	"github.com/redb0/mixologist/internal/domain"
 )
 
-const internalServerErrorMessage = "Внутренняя ошибка сервера"
+const InternalServerErrorMessage = "Внутренняя ошибка сервера"
 
 const (
 	CodeValidationError    = "VALIDATION_ERROR"
@@ -20,8 +20,11 @@ const (
 	CodeAlreadyExists      = "ALREADY_EXISTS"
 	CodeVersionConflict    = "VERSION_CONFLICT"
 	CodeResourceInUse      = "RESOURCE_IN_USE"
+	CodeUnauthorized       = "UNAUTHORIZED"
+	CodeForbidden          = "FORBIDDEN"
 	CodeInternalError      = "INTERNAL_ERROR"
 	CodeServiceUnavailable = "SERVICE_UNAVAILABLE"
+	CodeCSRFTokenInvalid   = "CSRF_TOKEN_INVALID"
 )
 
 type ErrorDetail struct {
@@ -46,8 +49,8 @@ type mappedError struct {
 	message string
 }
 
-// MapError переводит domain/repo ошибки в HTTP-статус, код и безопасное сообщение.
-func MapError(err error) (status int, code string, message string) {
+// Map переводит domain/repo ошибки в HTTP-статус, код и безопасное сообщение.
+func Map(err error) (status int, code string, message string) {
 	mapped := mapError(err)
 	return mapped.status, mapped.code, mapped.message
 }
@@ -68,6 +71,11 @@ func mapError(err error) mappedError {
 		return mappedError{http.StatusBadRequest, CodeValidationError, invalidData.Message}
 	}
 
+	var invalidAuthData *domain.InvalidAuthDataError
+	if errors.As(err, &invalidAuthData) {
+		return mappedError{http.StatusBadRequest, CodeValidationError, invalidAuthData.Message}
+	}
+
 	var alreadyExists *domain.AlreadyExistsError
 	if errors.As(err, &alreadyExists) {
 		return mappedError{http.StatusConflict, CodeAlreadyExists, alreadyExists.Message}
@@ -83,6 +91,16 @@ func mapError(err error) mappedError {
 		return mappedError{http.StatusConflict, CodeResourceInUse, resourceInUse.Message}
 	}
 
+	var unauthorized *domain.UnauthorizedError
+	if errors.As(err, &unauthorized) {
+		return mappedError{http.StatusUnauthorized, CodeUnauthorized, unauthorized.Message}
+	}
+
+	var forbidden *domain.ForbiddenError
+	if errors.As(err, &forbidden) {
+		return mappedError{http.StatusForbidden, CodeForbidden, forbidden.Message}
+	}
+
 	var notFound *domain.NotFoundError
 	if errors.As(err, &notFound) {
 		return mappedError{http.StatusNotFound, CodeNotFound, notFound.Message}
@@ -93,21 +111,51 @@ func mapError(err error) mappedError {
 		return mappedError{http.StatusServiceUnavailable, CodeServiceUnavailable, serviceUnavailable.Message}
 	}
 
-	return mappedError{http.StatusInternalServerError, CodeInternalError, internalServerErrorMessage}
+	return mappedError{http.StatusInternalServerError, CodeInternalError, InternalServerErrorMessage}
 }
 
-// RespondError пишет structured error envelope; для 5xx логирует полную цепочку.
-func RespondError(c *gin.Context, err error) {
-	requestID := requestid.Get(c)
-	status, code, message := MapError(err)
-	if status >= http.StatusInternalServerError {
-		slog.Error("internal error", "err", err, "request_id", requestID)
-	}
-	c.JSON(status, ErrorResponse{
+// Write пишет structured error envelope без Abort.
+func Write(c *gin.Context, status int, code, message string) {
+	write(c, false, status, code, message)
+}
+
+// WriteError пишет structured error envelope из domain-ошибки без Abort.
+func WriteError(c *gin.Context, err error) {
+	status, code, message := Map(err)
+	LogInternal(c, err, status)
+	Write(c, status, code, message)
+}
+
+// Abort прерывает обработку и пишет structured error envelope.
+func Abort(c *gin.Context, status int, code, message string) {
+	write(c, true, status, code, message)
+}
+
+// AbortError прерывает обработку и пишет structured error envelope из domain-ошибки.
+func AbortError(c *gin.Context, err error) {
+	status, code, message := Map(err)
+	LogInternal(c, err, status)
+	Abort(c, status, code, message)
+}
+
+func write(c *gin.Context, abort bool, status int, code, message string) {
+	body := ErrorResponse{
 		Error: ErrorBody{
 			Code:      code,
 			Message:   message,
-			RequestID: requestID,
+			RequestID: requestid.Get(c),
 		},
-	})
+	}
+	if abort {
+		c.AbortWithStatusJSON(status, body)
+		return
+	}
+	c.JSON(status, body)
+}
+
+func LogInternal(c *gin.Context, err error, status int) {
+	if status < http.StatusInternalServerError {
+		return
+	}
+	slog.Error("internal error", "err", err, "request_id", requestid.Get(c))
 }

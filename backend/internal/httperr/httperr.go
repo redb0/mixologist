@@ -122,7 +122,7 @@ func Write(c *gin.Context, status int, code, message string) {
 // WriteError пишет structured error envelope из domain-ошибки без Abort.
 func WriteError(c *gin.Context, err error) {
 	status, code, message := Map(err)
-	logInternal(c, err, status)
+	LogInternal(c, err, status)
 	Write(c, status, code, message)
 }
 
@@ -134,7 +134,7 @@ func Abort(c *gin.Context, status int, code, message string) {
 // AbortError прерывает обработку и пишет structured error envelope из domain-ошибки.
 func AbortError(c *gin.Context, err error) {
 	status, code, message := Map(err)
-	logInternal(c, err, status)
+	LogInternal(c, err, status)
 	Abort(c, status, code, message)
 }
 
@@ -153,7 +153,7 @@ func write(c *gin.Context, abort bool, status int, code, message string) {
 	c.JSON(status, body)
 }
 
-func logInternal(c *gin.Context, err error, status int) {
+func LogInternal(c *gin.Context, err error, status int) {
 	if status < http.StatusInternalServerError {
 		return
 	}

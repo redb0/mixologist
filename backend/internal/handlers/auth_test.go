@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -300,6 +301,10 @@ func TestAuthController_HandleGoogleCallback_Success(t *testing.T) {
 	expectedCSRF := middleware.SignCSRFToken(testAuthConfig().CSRFSecret, "session-token", time.Unix(1_700_000_000, 0).UTC())
 	if !strings.Contains(csrfCookie, expectedCSRF) {
 		t.Fatalf("csrf cookie must contain signed token: %q", csrfCookie)
+	}
+	wantCSRFMaxAge := strconv.Itoa(int(testAuthConfig().SessionTTL.Seconds()))
+	if !strings.Contains(csrfCookie, "Max-Age="+wantCSRFMaxAge) {
+		t.Fatalf("csrf cookie Max-Age must match session TTL: %q", csrfCookie)
 	}
 
 	oauthCookie := cookieHeader(w, oauthStateCookieName)

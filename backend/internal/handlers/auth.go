@@ -414,7 +414,8 @@ func parseOAuthStateCookie(value string, secret string) (oauthStatePayload, erro
 }
 
 func (c *AuthController) redirectAuthFlowErr(ctx *gin.Context, err error) {
-	_, code, message := httperr.Map(err)
+	status, code, message := httperr.Map(err)
+	httperr.LogInternal(ctx, err, status)
 	c.redirectAuthFlowError(ctx, code, message)
 }
 

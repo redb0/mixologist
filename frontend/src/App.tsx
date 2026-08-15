@@ -40,10 +40,7 @@ export function AppRoutes() {
 
           <Route element={<AdminLayout />}>
             <Route path="/ingredients" element={<IngredientsListPage />} />
-            <Route
-              path="/ingredients/:id"
-              element={<IngredientDetailPage />}
-            />
+            <Route path="/ingredients/:id" element={<IngredientDetailPage />} />
 
             <Route element={<RequireAdmin />}>
               <Route path="/ingredients/new" element={<IngredientFormPage />} />

@@ -188,7 +188,10 @@ export function IngredientDetailPage() {
         </Stack>
       </Paper>
 
-      <Dialog open={confirmOpen && isAdmin} onClose={() => setConfirmOpen(false)}>
+      <Dialog
+        open={confirmOpen && isAdmin}
+        onClose={() => setConfirmOpen(false)}
+      >
         <DialogTitle>Удалить ингредиент?</DialogTitle>
         <DialogContent>
           <DialogContentText>

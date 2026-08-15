@@ -28,7 +28,6 @@ import (
 const (
 	oauthStateCookieName = "oauth_state"
 	oauthStateTTL        = 10 * time.Minute
-	oauthCallbackTimeout = 10 * time.Second
 	returnToMaxLength    = 2048
 
 	CodeOAuthStateInvalid   = "OAUTH_STATE_INVALID"
@@ -231,15 +230,8 @@ func (c *AuthController) HandleGoogleCallback(ctx *gin.Context) {
 		return
 	}
 
-	oauthCtx, cancel := context.WithTimeout(ctx.Request.Context(), oauthCallbackTimeout)
-	defer cancel()
-
-	idToken, err := c.oauthClient.CompleteAuth(oauthCtx, statePayload.OAuthSession, code)
+	idToken, err := c.oauthClient.CompleteAuth(ctx.Request.Context(), statePayload.OAuthSession, code)
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			httperr.WriteError(ctx, domain.NewErrServiceUnavailable("превышено время ожидания ответа от Google"))
-			return
-		}
 		respondAuthFlowError(ctx, http.StatusBadRequest, CodeOAuthCallbackFailed, "Не удалось завершить вход через Google")
 		return
 	}

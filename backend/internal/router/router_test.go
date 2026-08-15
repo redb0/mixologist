@@ -1,7 +1,6 @@
 package router
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -74,11 +73,9 @@ func TestNew_BuildsRouterWhenDependenciesAreValid(t *testing.T) {
 
 func testAuthConfig() config.AuthConfig {
 	return config.AuthConfig{
-		SessionCookieName:   "session",
-		SessionCookieSecret: strings.Repeat("a", 32),
-		CSRFHeaderName:      "X-CSRF-Token",
-		CSRFCookieName:      "csrf_token",
-		CSRFSecret:          strings.Repeat("b", 32),
-		SessionTTL:          time.Hour,
+		SessionCookieName: "session",
+		CSRFHeaderName:    "X-CSRF-Token",
+		CSRFCookieName:    "csrf_token",
+		SessionTTL:        time.Hour,
 	}
 }

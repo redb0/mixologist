@@ -85,6 +85,12 @@ func validateDependencies(deps Dependencies) {
 	if strings.TrimSpace(deps.AuthConfig.CSRFHeaderName) == "" {
 		panic("router dependency AuthConfig.CSRFHeaderName is required")
 	}
+	if strings.TrimSpace(deps.AuthConfig.CSRFSecret) == "" {
+		panic("router dependency AuthConfig.CSRFSecret is required")
+	}
+	if strings.TrimSpace(deps.AuthConfig.CSRFCookieName) == "" {
+		panic("router dependency AuthConfig.CSRFCookieName is required")
+	}
 }
 
 func mustNotBeNil(name string, dep any) {

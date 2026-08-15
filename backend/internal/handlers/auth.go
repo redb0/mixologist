@@ -152,6 +152,9 @@ func NewAuthController(
 	oauthClient GoogleOAuthClient,
 	authConfig config.AuthConfig,
 ) *AuthController {
+	if strings.TrimSpace(authConfig.SessionCookieSecret) == "" {
+		panic("auth controller dependency AuthConfig.SessionCookieSecret is required")
+	}
 	return &AuthController{
 		authService: authService,
 		oauthClient: oauthClient,

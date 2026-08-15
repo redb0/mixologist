@@ -110,6 +110,24 @@ func (m *mockAuthService) CleanupExpiredOrRevokedSessions(ctx context.Context, n
 	return m.cleanupExpiredOrRevokedFunc(ctx, now)
 }
 
+func TestNewAuthController_ValidateDependencies(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic")
+		}
+	}()
+	_ = NewAuthController(
+		&mockAuthService{},
+		&mockGoogleOAuthClient{},
+		config.AuthConfig{
+			SessionCookieName:   "session",
+			CSRFHeaderName:      "X-CSRF-Token",
+			CSRFSecret:          "csrf_secret",
+			SessionCookieSecret: "",
+		},
+	)
+}
+
 func TestAuthController_StartGoogleLogin(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

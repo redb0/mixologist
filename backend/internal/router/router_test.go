@@ -29,7 +29,11 @@ func TestNew_RequiresDependencies(t *testing.T) {
 				IngredientController: &handlers.IngredientController{},
 				AuthService:          services.NewAuthService(nil, nil, nil, nil, ""),
 				AuthConfig: config.AuthConfig{
-					CSRFHeaderName: "X-CSRF-Token",
+					SessionCookieName:   "",
+					CSRFHeaderName:      "X-CSRF-Token",
+					CSRFSecret:          "csrf_secret",
+					SessionCookieSecret: "session_secret",
+					CSRFCookieName:      "csrf_name",
 				},
 			},
 		},
@@ -40,7 +44,41 @@ func TestNew_RequiresDependencies(t *testing.T) {
 				IngredientController: &handlers.IngredientController{},
 				AuthService:          services.NewAuthService(nil, nil, nil, nil, ""),
 				AuthConfig: config.AuthConfig{
-					SessionCookieName: "session",
+					SessionCookieName:   "session",
+					CSRFHeaderName:      "",
+					CSRFSecret:          "csrf_secret",
+					SessionCookieSecret: "session_secret",
+					CSRFCookieName:      "csrf_name",
+				},
+			},
+		},
+		{
+			name: "missing csrf secret",
+			deps: Dependencies{
+				HealthController:     &handlers.HealthController{},
+				IngredientController: &handlers.IngredientController{},
+				AuthService:          services.NewAuthService(nil, nil, nil, nil, ""),
+				AuthConfig: config.AuthConfig{
+					SessionCookieName:   "session",
+					CSRFHeaderName:      "X-CSRF-Token",
+					CSRFSecret:          "",
+					SessionCookieSecret: "session_secret",
+					CSRFCookieName:      "csrf_name",
+				},
+			},
+		},
+		{
+			name: "missing csrf cookie name",
+			deps: Dependencies{
+				HealthController:     &handlers.HealthController{},
+				IngredientController: &handlers.IngredientController{},
+				AuthService:          services.NewAuthService(nil, nil, nil, nil, ""),
+				AuthConfig: config.AuthConfig{
+					SessionCookieName:   "session",
+					CSRFHeaderName:      "X-CSRF-Token",
+					CSRFSecret:          "csrf_secret",
+					SessionCookieSecret: "session_secret",
+					CSRFCookieName:      "",
 				},
 			},
 		},
@@ -73,9 +111,11 @@ func TestNew_BuildsRouterWhenDependenciesAreValid(t *testing.T) {
 
 func testAuthConfig() config.AuthConfig {
 	return config.AuthConfig{
-		SessionCookieName: "session",
-		CSRFHeaderName:    "X-CSRF-Token",
-		CSRFCookieName:    "csrf_token",
-		SessionTTL:        time.Hour,
+		SessionCookieName:   "session",
+		CSRFHeaderName:      "X-CSRF-Token",
+		CSRFCookieName:      "csrf_token",
+		SessionTTL:          time.Hour,
+		CSRFSecret:          "csrf_secret",
+		SessionCookieSecret: "session_secret",
 	}
 }

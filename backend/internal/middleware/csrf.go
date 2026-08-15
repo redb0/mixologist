@@ -21,7 +21,6 @@ const (
 	csrfMACPrefix        = "csrf-v1:"
 	csrfHourSeconds      = int64(3600)
 	csrfHourSkew         = int64(1)
-	csrfCookieMaxAge     = int((csrfHourSkew + 1) * csrfHourSeconds)
 )
 
 func SignCSRFToken(secret, sessionToken string, now time.Time) string {
@@ -29,7 +28,7 @@ func SignCSRFToken(secret, sessionToken string, now time.Time) string {
 	return strconv.FormatInt(hour, 10) + "." + csrfMAC(secret, sessionToken, hour)
 }
 
-func ValidCSRFToken(secret, sessionToken, token string, now time.Time) bool {
+func ValidCSRFToken(secret, sessionToken, token string, now time.Time, maxAge time.Duration) bool {
 	hourStr, mac, ok := strings.Cut(strings.TrimSpace(token), ".")
 	if !ok || hourStr == "" || mac == "" {
 		return false
@@ -42,7 +41,7 @@ func ValidCSRFToken(secret, sessionToken, token string, now time.Time) bool {
 
 	current := csrfHourBucket(now)
 	delta := current - hour
-	if delta < -csrfHourSkew || delta > csrfHourSkew {
+	if delta < -csrfHourSkew || delta > csrfMaxHourDelta(maxAge) {
 		return false
 	}
 
@@ -55,7 +54,7 @@ func SetCSRFCookie(c *gin.Context, cfg config.AuthConfig, sessionToken string, n
 	c.SetCookie(
 		cfg.CSRFCookieName,
 		SignCSRFToken(cfg.CSRFSecret, sessionToken, now),
-		csrfCookieMaxAge,
+		csrfCookieMaxAge(cfg.SessionTTL),
 		"/",
 		cfg.SessionCookieDomain,
 		cfg.SessionCookieSecure,
@@ -82,7 +81,7 @@ func RequireCSRF(cfg config.AuthConfig, now func() time.Time) gin.HandlerFunc {
 		}
 
 		headerToken := strings.TrimSpace(c.GetHeader(cfg.CSRFHeaderName))
-		if !ValidCSRFToken(cfg.CSRFSecret, sessionToken, headerToken, now().UTC()) {
+		if !ValidCSRFToken(cfg.CSRFSecret, sessionToken, headerToken, now().UTC(), cfg.SessionTTL) {
 			httperr.Abort(c, http.StatusForbidden, CodeCSRFTokenInvalid, csrfInvalidMessage)
 			return
 		}
@@ -93,6 +92,25 @@ func RequireCSRF(cfg config.AuthConfig, now func() time.Time) gin.HandlerFunc {
 
 func csrfHourBucket(now time.Time) int64 {
 	return now.UTC().Unix() / csrfHourSeconds
+}
+
+func csrfMaxHourDelta(maxAge time.Duration) int64 {
+	if maxAge <= 0 {
+		return csrfHourSkew
+	}
+	delta := int64(maxAge/time.Second) / csrfHourSeconds
+	if delta < csrfHourSkew {
+		return csrfHourSkew
+	}
+	return delta
+}
+
+func csrfCookieMaxAge(ttl time.Duration) int {
+	seconds := int(ttl.Seconds())
+	if seconds <= 0 {
+		return int((csrfHourSkew + 1) * csrfHourSeconds)
+	}
+	return seconds
 }
 
 func csrfMAC(secret, sessionToken string, hour int64) string {

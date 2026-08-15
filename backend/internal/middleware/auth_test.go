@@ -171,6 +171,22 @@ func TestAuthMiddleware(t *testing.T) {
 			wantHandlerHit: true,
 		},
 		{
+			name:   "csrf token from two hours ago is accepted within session ttl",
+			method: http.MethodPost,
+			path:   "/admin",
+			lookup: &stubSessionLookup{user: admin},
+			cookies: []*http.Cookie{
+				{Name: cfg.SessionCookieName, Value: "admin-token"},
+			},
+			csrfHeader: SignCSRFToken(
+				cfg.CSRFSecret,
+				"admin-token",
+				csrfTestNow.Add(-2*time.Hour),
+			),
+			wantStatus:     http.StatusOK,
+			wantHandlerHit: true,
+		},
+		{
 			name:   "client forged matching csrf cookie and header is rejected",
 			method: http.MethodPost,
 			path:   "/admin",
@@ -349,26 +365,29 @@ func TestValidCSRFToken(t *testing.T) {
 	secret := strings.Repeat("a", 32)
 	session := "session-token"
 	current := SignCSRFToken(secret, session, csrfTestNow)
+	sessionTTL := 24 * time.Hour
 
 	tests := []struct {
-		name  string
-		token string
-		now   time.Time
-		want  bool
+		name   string
+		token  string
+		now    time.Time
+		maxAge time.Duration
+		want   bool
 	}{
-		{name: "current hour", token: current, now: csrfTestNow, want: true},
-		{name: "previous hour", token: SignCSRFToken(secret, session, csrfTestNow.Add(-time.Hour)), now: csrfTestNow, want: true},
-		{name: "next hour", token: SignCSRFToken(secret, session, csrfTestNow.Add(time.Hour)), now: csrfTestNow, want: true},
-		{name: "two hours old", token: SignCSRFToken(secret, session, csrfTestNow.Add(-2*time.Hour)), now: csrfTestNow, want: false},
-		{name: "other session", token: SignCSRFToken(secret, "other-session", csrfTestNow), now: csrfTestNow, want: false},
-		{name: "empty", token: "", now: csrfTestNow, want: false},
-		{name: "malformed", token: "not-a-token", now: csrfTestNow, want: false},
-		{name: "tampered mac", token: strings.Split(current, ".")[0] + ".deadbeef", now: csrfTestNow, want: false},
+		{name: "current hour", token: current, now: csrfTestNow, maxAge: sessionTTL, want: true},
+		{name: "previous hour", token: SignCSRFToken(secret, session, csrfTestNow.Add(-time.Hour)), now: csrfTestNow, maxAge: sessionTTL, want: true},
+		{name: "next hour", token: SignCSRFToken(secret, session, csrfTestNow.Add(time.Hour)), now: csrfTestNow, maxAge: sessionTTL, want: true},
+		{name: "two hours old within session ttl", token: SignCSRFToken(secret, session, csrfTestNow.Add(-2*time.Hour)), now: csrfTestNow, maxAge: sessionTTL, want: true},
+		{name: "older than session ttl", token: SignCSRFToken(secret, session, csrfTestNow.Add(-25*time.Hour)), now: csrfTestNow, maxAge: sessionTTL, want: false},
+		{name: "other session", token: SignCSRFToken(secret, "other-session", csrfTestNow), now: csrfTestNow, maxAge: sessionTTL, want: false},
+		{name: "empty", token: "", now: csrfTestNow, maxAge: sessionTTL, want: false},
+		{name: "malformed", token: "not-a-token", now: csrfTestNow, maxAge: sessionTTL, want: false},
+		{name: "tampered mac", token: strings.Split(current, ".")[0] + ".deadbeef", now: csrfTestNow, maxAge: sessionTTL, want: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, ValidCSRFToken(secret, session, tt.token, tt.now))
+			assert.Equal(t, tt.want, ValidCSRFToken(secret, session, tt.token, tt.now, tt.maxAge))
 		})
 	}
 }
@@ -398,7 +417,7 @@ func TestRequireAuth_RefreshesCSRFCookie(t *testing.T) {
 		if strings.HasPrefix(header, cfg.CSRFCookieName+"=") && strings.Contains(header, expected) {
 			found = true
 			assert.NotContains(t, header, "HttpOnly")
-			assert.Contains(t, header, "Max-Age="+strconv.Itoa(csrfCookieMaxAge))
+			assert.Contains(t, header, "Max-Age="+strconv.Itoa(int(cfg.SessionTTL.Seconds())))
 			break
 		}
 	}
@@ -512,6 +531,7 @@ func testAuthConfig() config.AuthConfig {
 	return config.AuthConfig{
 		SessionCookieName:   "session",
 		SessionCookieSecret: strings.Repeat("a", 32),
+		SessionTTL:          24 * time.Hour,
 		CSRFSecret:          strings.Repeat("b", 32),
 		CSRFCookieName:      "csrf_token",
 		CSRFHeaderName:      "X-CSRF-Token",

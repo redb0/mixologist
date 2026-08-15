@@ -30,6 +30,7 @@ const (
 	oauthStateTTL        = 10 * time.Minute
 	oauthCallbackTimeout = 10 * time.Second
 	returnToMaxLength    = 2048
+	authErrorPath        = "/auth/error"
 
 	CodeOAuthStateInvalid   = "OAUTH_STATE_INVALID"
 	CodeOAuthCallbackFailed = "OAUTH_CALLBACK_FAILED"
@@ -214,26 +215,26 @@ func (c *AuthController) StartGoogleLogin(ctx *gin.Context) {
 
 func (c *AuthController) HandleGoogleCallback(ctx *gin.Context) {
 	if strings.TrimSpace(ctx.Query("error")) != "" {
-		respondAuthFlowError(ctx, http.StatusBadRequest, CodeOAuthCallbackFailed, "Не удалось завершить вход через Google")
+		c.redirectAuthFlowError(ctx, CodeOAuthCallbackFailed, "Не удалось завершить вход через Google")
 		return
 	}
 
 	code := strings.TrimSpace(ctx.Query("code"))
 	state := strings.TrimSpace(ctx.Query("state"))
 	if code == "" || state == "" {
-		respondAuthFlowError(ctx, http.StatusBadRequest, CodeOAuthCallbackFailed, "Не удалось завершить вход через Google")
+		c.redirectAuthFlowError(ctx, CodeOAuthCallbackFailed, "Не удалось завершить вход через Google")
 		return
 	}
 
 	stateCookie, err := ctx.Cookie(oauthStateCookieName)
 	if err != nil {
-		respondAuthFlowError(ctx, http.StatusBadRequest, CodeOAuthStateInvalid, "Некорректный или просроченный OAuth state")
+		c.redirectAuthFlowError(ctx, CodeOAuthStateInvalid, "Некорректный или просроченный OAuth state")
 		return
 	}
 
 	statePayload, err := parseOAuthStateCookie(stateCookie, c.authConfig.SessionCookieSecret)
 	if err != nil || c.now().UTC().Unix() >= statePayload.ExpiresAt || statePayload.State != state {
-		respondAuthFlowError(ctx, http.StatusBadRequest, CodeOAuthStateInvalid, "Некорректный или просроченный OAuth state")
+		c.redirectAuthFlowError(ctx, CodeOAuthStateInvalid, "Некорректный или просроченный OAuth state")
 		return
 	}
 
@@ -243,10 +244,10 @@ func (c *AuthController) HandleGoogleCallback(ctx *gin.Context) {
 	idToken, err := c.oauthClient.CompleteAuth(oauthCtx, statePayload.OAuthSession, code)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			httperr.WriteError(ctx, domain.NewErrServiceUnavailable("не удалось завершить вход через Google"))
+			c.redirectAuthFlowErr(ctx, domain.NewErrServiceUnavailable("не удалось завершить вход через Google"))
 			return
 		}
-		respondAuthFlowError(ctx, http.StatusBadRequest, CodeOAuthCallbackFailed, "Не удалось завершить вход через Google")
+		c.redirectAuthFlowError(ctx, CodeOAuthCallbackFailed, "Не удалось завершить вход через Google")
 		return
 	}
 
@@ -256,17 +257,17 @@ func (c *AuthController) HandleGoogleCallback(ctx *gin.Context) {
 		statePayload.Nonce,
 	)
 	if err != nil {
-		httperr.WriteError(ctx, err)
+		c.redirectAuthFlowErr(ctx, err)
 		return
 	}
 
 	user, err := c.authService.UpsertGoogleUser(ctx.Request.Context(), identity, c.now().UTC())
 	if err != nil {
 		if errors.Is(err, domain.ErrAlreadyExists) {
-			respondAuthFlowError(ctx, http.StatusBadRequest, CodeOAuthCallbackFailed, "Не удалось завершить вход через Google")
+			c.redirectAuthFlowError(ctx, CodeOAuthCallbackFailed, "Не удалось завершить вход через Google")
 			return
 		}
-		httperr.WriteError(ctx, err)
+		c.redirectAuthFlowErr(ctx, err)
 		return
 	}
 
@@ -281,7 +282,7 @@ func (c *AuthController) HandleGoogleCallback(ctx *gin.Context) {
 		},
 	)
 	if err != nil {
-		httperr.WriteError(ctx, err)
+		c.redirectAuthFlowErr(ctx, err)
 		return
 	}
 
@@ -412,8 +413,17 @@ func parseOAuthStateCookie(value string, secret string) (oauthStatePayload, erro
 	return payload, nil
 }
 
-func respondAuthFlowError(c *gin.Context, status int, code string, message string) {
-	httperr.Write(c, status, code, message)
+func (c *AuthController) redirectAuthFlowErr(ctx *gin.Context, err error) {
+	_, code, message := httperr.Map(err)
+	c.redirectAuthFlowError(ctx, code, message)
+}
+
+func (c *AuthController) redirectAuthFlowError(ctx *gin.Context, code string, message string) {
+	c.clearCookie(ctx, oauthStateCookieName, true)
+	query := url.Values{}
+	query.Set("code", code)
+	query.Set("message", message)
+	ctx.Redirect(http.StatusFound, authErrorPath+"?"+query.Encode())
 }
 
 func appendQueryParam(rawURL string, key string, value string) (string, error) {

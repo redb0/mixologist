@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -207,16 +208,7 @@ func TestAuthController_HandleGoogleCallback_StateValidation(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/google/callback?code=ok&state=invalid", nil)
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("unexpected status: %d", w.Code)
-	}
-	var response httperr.ErrorResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-		t.Fatalf("decode error response: %v", err)
-	}
-	if response.Error.Code != CodeOAuthStateInvalid {
-		t.Fatalf("unexpected error code: %s", response.Error.Code)
-	}
+	assertAuthErrorRedirect(t, w, CodeOAuthStateInvalid)
 }
 
 func TestAuthController_HandleGoogleCallback_Success(t *testing.T) {
@@ -361,16 +353,7 @@ func TestAuthController_HandleGoogleCallback_EmailConflict(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: oauthStateCookieName, Value: cookieValue})
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("unexpected status: %d", w.Code)
-	}
-	var response httperr.ErrorResponse
-	if err = json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-		t.Fatalf("decode error response: %v", err)
-	}
-	if response.Error.Code != CodeOAuthCallbackFailed {
-		t.Fatalf("unexpected error code: %s", response.Error.Code)
-	}
+	assertAuthErrorRedirect(t, w, CodeOAuthCallbackFailed)
 }
 
 func TestAuthController_GetCurrentUser_UnauthorizedWithoutCookie(t *testing.T) {
@@ -713,67 +696,58 @@ func TestAuthController_HandleGoogleCallback_ErrorCases(t *testing.T) {
 	tamperedCookie := validCookie[:strings.LastIndex(validCookie, ".")+1] + strings.Repeat("0", 64)
 
 	tests := []struct {
-		name       string
-		query      string
-		cookie     string
-		oauthErr   error
-		wantStatus int
-		wantCode   string
+		name     string
+		query    string
+		cookie   string
+		oauthErr error
+		wantCode string
 	}{
 		{
-			name:       "google error",
-			query:      "?error=access_denied",
-			wantStatus: http.StatusBadRequest,
-			wantCode:   CodeOAuthCallbackFailed,
+			name:     "google error",
+			query:    "?error=access_denied",
+			wantCode: CodeOAuthCallbackFailed,
 		},
 		{
-			name:       "missing code",
-			query:      "?state=state-1",
-			wantStatus: http.StatusBadRequest,
-			wantCode:   CodeOAuthCallbackFailed,
+			name:     "missing code",
+			query:    "?state=state-1",
+			wantCode: CodeOAuthCallbackFailed,
 		},
 		{
-			name:       "missing cookie",
-			query:      "?code=ok&state=state-1",
-			wantStatus: http.StatusBadRequest,
-			wantCode:   CodeOAuthStateInvalid,
+			name:     "missing cookie",
+			query:    "?code=ok&state=state-1",
+			wantCode: CodeOAuthStateInvalid,
 		},
 		{
-			name:       "expired state",
-			query:      "?code=ok&state=state-1",
-			cookie:     expiredCookie,
-			wantStatus: http.StatusBadRequest,
-			wantCode:   CodeOAuthStateInvalid,
+			name:     "expired state",
+			query:    "?code=ok&state=state-1",
+			cookie:   expiredCookie,
+			wantCode: CodeOAuthStateInvalid,
 		},
 		{
-			name:       "state mismatch",
-			query:      "?code=ok&state=other-state",
-			cookie:     validCookie,
-			wantStatus: http.StatusBadRequest,
-			wantCode:   CodeOAuthStateInvalid,
+			name:     "state mismatch",
+			query:    "?code=ok&state=other-state",
+			cookie:   validCookie,
+			wantCode: CodeOAuthStateInvalid,
 		},
 		{
-			name:       "tampered cookie",
-			query:      "?code=ok&state=state-1",
-			cookie:     tamperedCookie,
-			wantStatus: http.StatusBadRequest,
-			wantCode:   CodeOAuthStateInvalid,
+			name:     "tampered cookie",
+			query:    "?code=ok&state=state-1",
+			cookie:   tamperedCookie,
+			wantCode: CodeOAuthStateInvalid,
 		},
 		{
-			name:       "complete auth failed",
-			query:      "?code=ok&state=state-1",
-			cookie:     validCookie,
-			oauthErr:   errors.New("exchange failed"),
-			wantStatus: http.StatusBadRequest,
-			wantCode:   CodeOAuthCallbackFailed,
+			name:     "complete auth failed",
+			query:    "?code=ok&state=state-1",
+			cookie:   validCookie,
+			oauthErr: errors.New("exchange failed"),
+			wantCode: CodeOAuthCallbackFailed,
 		},
 		{
-			name:       "complete auth timeout",
-			query:      "?code=ok&state=state-1",
-			cookie:     validCookie,
-			oauthErr:   context.DeadlineExceeded,
-			wantStatus: http.StatusServiceUnavailable,
-			wantCode:   httperr.CodeServiceUnavailable,
+			name:     "complete auth timeout",
+			query:    "?code=ok&state=state-1",
+			cookie:   validCookie,
+			oauthErr: context.DeadlineExceeded,
+			wantCode: httperr.CodeServiceUnavailable,
 		},
 	}
 
@@ -805,16 +779,7 @@ func TestAuthController_HandleGoogleCallback_ErrorCases(t *testing.T) {
 			}
 			r.ServeHTTP(w, req)
 
-			if w.Code != tt.wantStatus {
-				t.Fatalf("unexpected status: %d", w.Code)
-			}
-			var response httperr.ErrorResponse
-			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-				t.Fatalf("decode error response: %v", err)
-			}
-			if response.Error.Code != tt.wantCode {
-				t.Fatalf("unexpected error code: %s", response.Error.Code)
-			}
+			assertAuthErrorRedirect(t, w, tt.wantCode)
 		})
 	}
 }
@@ -861,9 +826,7 @@ func TestAuthController_HandleGoogleCallback_InvalidIdentity(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: oauthStateCookieName, Value: cookieValue})
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("unexpected status: %d", w.Code)
-	}
+	assertAuthErrorRedirect(t, w, httperr.CodeUnauthorized)
 }
 
 func TestAuthController_HandleGoogleCallback_IdentityValidatorUnavailable(t *testing.T) {
@@ -908,16 +871,7 @@ func TestAuthController_HandleGoogleCallback_IdentityValidatorUnavailable(t *tes
 	req.AddCookie(&http.Cookie{Name: oauthStateCookieName, Value: cookieValue})
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusServiceUnavailable {
-		t.Fatalf("unexpected status: %d", w.Code)
-	}
-	var response httperr.ErrorResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-		t.Fatalf("decode error response: %v", err)
-	}
-	if response.Error.Code != httperr.CodeServiceUnavailable {
-		t.Fatalf("unexpected error code: %s", response.Error.Code)
-	}
+	assertAuthErrorRedirect(t, w, httperr.CodeServiceUnavailable)
 }
 
 func TestAuthController_HandleGoogleCallback_CreateSessionError(t *testing.T) {
@@ -974,9 +928,7 @@ func TestAuthController_HandleGoogleCallback_CreateSessionError(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: oauthStateCookieName, Value: cookieValue})
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusInternalServerError {
-		t.Fatalf("unexpected status: %d", w.Code)
-	}
+	assertAuthErrorRedirect(t, w, httperr.CodeInternalError)
 }
 
 func TestGoogleOAuthClient_CompleteAuth_RespectsContext(t *testing.T) {
@@ -1125,6 +1077,30 @@ func cookieHeader(w *httptest.ResponseRecorder, name string) string {
 		}
 	}
 	return ""
+}
+
+func assertAuthErrorRedirect(t *testing.T, w *httptest.ResponseRecorder, wantCode string) {
+	t.Helper()
+	if w.Code != http.StatusFound {
+		t.Fatalf("unexpected status: %d", w.Code)
+	}
+	location, err := url.Parse(w.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("parse location: %v", err)
+	}
+	if location.Path != authErrorPath {
+		t.Fatalf("unexpected redirect path: %q", location.Path)
+	}
+	if location.Query().Get("code") != wantCode {
+		t.Fatalf("unexpected error code: %q", location.Query().Get("code"))
+	}
+	if strings.TrimSpace(location.Query().Get("message")) == "" {
+		t.Fatal("redirect must include error message")
+	}
+	oauthCookie := cookieHeader(w, oauthStateCookieName)
+	if oauthCookie == "" || !strings.Contains(oauthCookie, "Max-Age=0") {
+		t.Fatalf("oauth state cookie must be cleared: %q", oauthCookie)
+	}
 }
 
 func testAuthConfig() config.AuthConfig {

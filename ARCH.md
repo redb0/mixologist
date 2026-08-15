@@ -101,10 +101,10 @@ frontend/
 
 ## Авторизация
 
-- **Вход:** `GET /api/v1/auth/google/login` → Google OAuth → callback → HttpOnly session cookie + CSRF cookie.
+- **Вход:** `GET /api/v1/auth/google/login` → Google OAuth → callback → HttpOnly session cookie + CSRF cookie. Ошибки callback — redirect на `/auth/error?code=&message=`.
 - **Текущий пользователь:** `GET /api/v1/auth/me` (требует session cookie).
 - **Выход:** `POST /api/v1/auth/logout` (session cookie + `X-CSRF-Token`).
-- **CSRF:** mutating запросы с session cookie требуют заголовок `X-CSRF-Token` (HMAC от session token).
+- **CSRF:** mutating запросы с session cookie требуют заголовок `X-CSRF-Token` (HMAC от session token). Cookie `Max-Age` и окно валидности токена совпадают с `SESSION_TTL`; cookie обновляется на аутентифицированных запросах.
 - **RBAC:** чтение `/api/v1/ingredients*` публичное; `POST`/`PATCH`/`DELETE`/`PUT .../icon` — только `admin`.
 
 ## HTTP API

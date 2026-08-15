@@ -1,16 +1,14 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AdminLayout } from "./app/AdminLayout";
-import { UserLayout } from "./app/UserLayout";
 import { AuthLoading } from "./features/auth/AuthLoading";
 import { AuthProvider } from "./features/auth/AuthProvider";
 import { RequireAuth } from "./features/auth/RequireAuth";
-import { RequireAdmin, RequireUser } from "./features/auth/RequireRole";
+import { RequireAdmin } from "./features/auth/RequireRole";
 import { AuthCallbackPage } from "./pages/AuthCallbackPage";
 import { AuthErrorPage } from "./pages/AuthErrorPage";
 import { LoginPage } from "./pages/LoginPage";
 import { LogoutPage } from "./pages/LogoutPage";
-import { UserHomePage } from "./pages/UserHomePage";
 
 const IngredientsListPage = lazy(() =>
   import("./pages/IngredientsListPage").then((module) => ({
@@ -38,25 +36,21 @@ export function AppRoutes() {
 
         <Route element={<RequireAuth />}>
           <Route path="/logout" element={<LogoutPage />} />
+          <Route path="/" element={<Navigate to="/ingredients" replace />} />
 
-          <Route element={<RequireAdmin />}>
-            <Route element={<AdminLayout />}>
-              <Route path="/ingredients" element={<IngredientsListPage />} />
+          <Route element={<AdminLayout />}>
+            <Route path="/ingredients" element={<IngredientsListPage />} />
+            <Route
+              path="/ingredients/:id"
+              element={<IngredientDetailPage />}
+            />
+
+            <Route element={<RequireAdmin />}>
               <Route path="/ingredients/new" element={<IngredientFormPage />} />
-              <Route
-                path="/ingredients/:id"
-                element={<IngredientDetailPage />}
-              />
               <Route
                 path="/ingredients/:id/edit"
                 element={<IngredientFormPage />}
               />
-            </Route>
-          </Route>
-
-          <Route element={<RequireUser />}>
-            <Route element={<UserLayout />}>
-              <Route path="/" element={<UserHomePage />} />
             </Route>
           </Route>
         </Route>

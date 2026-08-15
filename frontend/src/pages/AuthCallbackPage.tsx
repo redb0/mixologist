@@ -11,7 +11,7 @@ export function AuthCallbackPage() {
     return <AuthLoading />;
   }
   if (auth.status === "authenticated") {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/ingredients" replace />;
   }
   if (auth.status === "error" && auth.error) {
     return (

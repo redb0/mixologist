@@ -21,6 +21,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { enqueueSnackbar } from "notistack";
+import { useAuth } from "../features/auth/auth-context";
 import {
   deleteIngredient,
   getIngredient,
@@ -31,6 +32,8 @@ import { ApiError } from "../shared/api/client";
 import { ApiErrorAlert } from "../shared/ui/ApiErrorAlert";
 
 export function IngredientDetailPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { id: idParam } = useParams();
   const id = Number(idParam);
   const isValidID = Number.isInteger(id) && id > 0;
@@ -143,24 +146,26 @@ export function IngredientDetailPage() {
                   Ингредиент #{ingredient.id}
                 </Typography>
               </Box>
-              <Stack direction="row" spacing={1}>
-                <Button
-                  component={RouterLink}
-                  to={`/ingredients/${ingredient.id}/edit`}
-                  variant="contained"
-                  startIcon={<EditIcon />}
-                >
-                  Изменить
-                </Button>
-                <Button
-                  color="error"
-                  variant="outlined"
-                  startIcon={<DeleteIcon />}
-                  onClick={() => setConfirmOpen(true)}
-                >
-                  Удалить
-                </Button>
-              </Stack>
+              {isAdmin ? (
+                <Stack direction="row" spacing={1}>
+                  <Button
+                    component={RouterLink}
+                    to={`/ingredients/${ingredient.id}/edit`}
+                    variant="contained"
+                    startIcon={<EditIcon />}
+                  >
+                    Изменить
+                  </Button>
+                  <Button
+                    color="error"
+                    variant="outlined"
+                    startIcon={<DeleteIcon />}
+                    onClick={() => setConfirmOpen(true)}
+                  >
+                    Удалить
+                  </Button>
+                </Stack>
+              ) : null}
             </Stack>
             <Divider />
             {fields.map(([label, value]) => (
@@ -183,7 +188,7 @@ export function IngredientDetailPage() {
         </Stack>
       </Paper>
 
-      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+      <Dialog open={confirmOpen && isAdmin} onClose={() => setConfirmOpen(false)}>
         <DialogTitle>Удалить ингредиент?</DialogTitle>
         <DialogContent>
           <DialogContentText>

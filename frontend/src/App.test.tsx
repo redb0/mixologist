@@ -83,19 +83,64 @@ describe("auth routes", () => {
     );
   });
 
-  it("не пускает user в admin routes", async () => {
+  it("показывает каталог ингредиентов обычному пользователю", async () => {
     server.use(
       http.get("/api/v1/auth/me", () => HttpResponse.json(regularUser)),
+      http.get("/api/v1/ingredients", () =>
+        HttpResponse.json({
+          ingredients: [],
+          nextPageToken: "",
+          totalSize: 0,
+        }),
+      ),
     );
 
     renderApp("/ingredients");
 
     expect(
-      await screen.findByRole("heading", { name: "Добро пожаловать, Иван" }),
+      await screen.findByRole("heading", { name: "Ингредиенты" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "Ингредиенты" }),
+      screen.queryByRole("link", { name: "Добавить ингредиент" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("не пускает user на страницы создания и редактирования", async () => {
+    server.use(
+      http.get("/api/v1/auth/me", () => HttpResponse.json(regularUser)),
+      http.get("/api/v1/ingredients", () =>
+        HttpResponse.json({
+          ingredients: [],
+          nextPageToken: "",
+          totalSize: 0,
+        }),
+      ),
+    );
+
+    renderApp("/ingredients/new");
+
+    expect(
+      await screen.findByRole("heading", { name: "Ингредиенты" }),
+    ).toBeInTheDocument();
+  });
+
+  it("открывает каталог ингредиентов с корня для обычного пользователя", async () => {
+    server.use(
+      http.get("/api/v1/auth/me", () => HttpResponse.json(regularUser)),
+      http.get("/api/v1/ingredients", () =>
+        HttpResponse.json({
+          ingredients: [],
+          nextPageToken: "",
+          totalSize: 0,
+        }),
+      ),
+    );
+
+    renderApp("/");
+
+    expect(
+      await screen.findByRole("heading", { name: "Ингредиенты" }),
+    ).toBeInTheDocument();
   });
 
   it("показывает admin UI ингредиентов администратору", async () => {
@@ -125,6 +170,13 @@ describe("auth routes", () => {
     let logoutCalled = false;
     server.use(
       http.get("/api/v1/auth/me", () => HttpResponse.json(regularUser)),
+      http.get("/api/v1/ingredients", () =>
+        HttpResponse.json({
+          ingredients: [],
+          nextPageToken: "",
+          totalSize: 0,
+        }),
+      ),
       http.post("/api/v1/auth/logout", () => {
         logoutCalled = true;
         return new HttpResponse(null, { status: 204 });
@@ -134,7 +186,7 @@ describe("auth routes", () => {
     renderApp("/");
 
     expect(
-      await screen.findByRole("heading", { name: "Добро пожаловать, Иван" }),
+      await screen.findByRole("heading", { name: "Ингредиенты" }),
     ).toBeInTheDocument();
 
     await user.click(screen.getAllByRole("link", { name: "Выйти" })[0]);

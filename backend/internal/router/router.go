@@ -14,6 +14,11 @@ import (
 	"github.com/redb0/mixologist/internal/services"
 )
 
+// Dependencies содержит все внешние зависимости приложения.
+// Все поля должны быть инициализированы: указатели не должны быть nil,
+// интерфейсы должны содержать конкретную реализацию (не nil-значение),
+// а строковые конфиги – не пустыми.
+// Нарушение этих условий вызовет панику при валидации.
 type Dependencies struct {
 	HealthController     *handlers.HealthController
 	IngredientController *handlers.IngredientController
@@ -66,6 +71,9 @@ func New(deps Dependencies) *gin.Engine {
 	return r
 }
 
+// validateDependencies проверяет, что все зависимости инициализированы корректно.
+// Ожидает, что интерфейсы (например, AuthService) содержат конкретный объект,
+// а не только тип с nil-значением. В противном случае возникает паника.
 func validateDependencies(deps Dependencies) {
 	mustNotBeNil("HealthController", deps.HealthController)
 	mustNotBeNil("IngredientController", deps.IngredientController)

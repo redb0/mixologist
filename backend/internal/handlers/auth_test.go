@@ -749,6 +749,14 @@ func TestAuthController_HandleGoogleCallback_ErrorCases(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 			wantCode:   CodeOAuthCallbackFailed,
 		},
+		{
+			name:       "complete auth timeout",
+			query:      "?code=ok&state=state-1",
+			cookie:     validCookie,
+			oauthErr:   context.DeadlineExceeded,
+			wantStatus: http.StatusServiceUnavailable,
+			wantCode:   httperr.CodeServiceUnavailable,
+		},
 	}
 
 	for _, tt := range tests {

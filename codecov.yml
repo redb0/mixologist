@@ -2,3 +2,4 @@ ignore:
   - "backend/cmd/api/main.go"
   - "backend/internal/router/router.go"
   - "backend/internal/testutil/postgres.go"
+  - "backend/internal/testutil/auth.go"

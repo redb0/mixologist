@@ -2,9 +2,9 @@ import { Alert, AlertTitle, Button, Stack } from "@mui/material";
 import { ApiError } from "../api/client";
 
 const CODE_MESSAGES: Record<string, string> = {
-  UNAUTHORIZED:
-    "Требуется вход в систему. Авторизация появится в следующем этапе.",
+  UNAUTHORIZED: "Требуется вход в систему.",
   FORBIDDEN: "Недостаточно прав для выполнения операции.",
+  CSRF_TOKEN_INVALID: "Сессия устарела. Обновите страницу и попробуйте снова.",
   VERSION_CONFLICT:
     "Данные были изменены другим запросом. Обновите страницу и попробуйте снова.",
   RESOURCE_IN_USE: "Ресурс используется и не может быть удалён.",
@@ -21,9 +21,11 @@ export function mapApiErrorMessage(error: ApiError): string {
 export function ApiErrorAlert({
   error,
   onRetry,
+  mapCode = true,
 }: {
   error: ApiError;
   onRetry?: () => void;
+  mapCode?: boolean;
 }) {
   const title =
     error.code === "UNAUTHORIZED" || error.code === "FORBIDDEN"
@@ -42,7 +44,7 @@ export function ApiErrorAlert({
       }
     >
       <AlertTitle>{title}</AlertTitle>
-      {mapApiErrorMessage(error)}
+      {mapCode ? mapApiErrorMessage(error) : error.message}
       {error.requestId && (
         <Stack component="span" sx={{ display: "block", mt: 1, opacity: 0.8 }}>
           ID запроса: {error.requestId}

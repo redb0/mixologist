@@ -60,6 +60,8 @@ export interface paths {
          *     обменивает code на identity token, валидирует issuer/audience/expiry
          *     и обязательные claims, создаёт/обновляет пользователя и сессию,
          *     выставляет HttpOnly session cookie и перенаправляет на `return_to`.
+         *     Ошибки OAuth, identity и сессии перенаправляют браузер на
+         *     `/auth/error?code=&message=`, а не отдают JSON.
          */
         get: operations["handleGoogleCallback"];
         put?: never;
@@ -452,7 +454,8 @@ export interface components {
          * @description CSRF token для mutating запросов с cookie-сессией.
          *     Выпускается сервером (HMAC от session token и часового timestamp),
          *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
-         *     Токен принимается в окне ±1 час; cookie обновляется на аутентифицированных запросах.
+         *     Токен принимается в окне жизни сессии (`SESSION_TTL`); cookie Max-Age
+         *     совпадает с TTL сессии и обновляется на аутентифицированных запросах.
          */
         CSRFToken: string;
         /** @description Идентификатор ингредиента (положительное целое) */
@@ -581,34 +584,29 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Успешный вход — redirect в приложение */
+            /**
+             * @description Успешный вход — redirect на `return_to`.
+             *     Ошибка callback — redirect на `/auth/error?code=&message=`
+             *     (`OAUTH_STATE_INVALID`, `OAUTH_CALLBACK_FAILED`, `UNAUTHORIZED`,
+             *     `INTERNAL_ERROR`, `SERVICE_UNAVAILABLE`).
+             */
             302: {
                 headers: {
-                    /** @description Относительный путь внутри приложения (`return_to`) */
+                    /**
+                     * @description Относительный путь внутри приложения: `return_to` при успехе
+                     *     или `/auth/error` при ошибке OAuth/identity.
+                     */
                     Location: string;
                     "X-Request-ID": components["headers"]["XRequestID"];
-                    /** @description HttpOnly session cookie и очистка OAuth state cookie */
+                    /**
+                     * @description При успехе — HttpOnly session cookie, CSRF cookie и очистка OAuth state cookie.
+                     *     При ошибке — очистка OAuth state cookie.
+                     */
                     "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /**
-             * @description Некорректный callback (`OAUTH_STATE_INVALID`, `OAUTH_CALLBACK_FAILED`,
-             *     `VALIDATION_ERROR`).
-             */
-            400: {
-                headers: {
-                    "X-Request-ID": components["headers"]["XRequestID"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            500: components["responses"]["InternalError"];
-            503: components["responses"]["ServiceUnavailable"];
         };
     };
     getCurrentUser: {
@@ -643,7 +641,8 @@ export interface operations {
                  * @description CSRF token для mutating запросов с cookie-сессией.
                  *     Выпускается сервером (HMAC от session token и часового timestamp),
                  *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
-                 *     Токен принимается в окне ±1 час; cookie обновляется на аутентифицированных запросах.
+                 *     Токен принимается в окне жизни сессии (`SESSION_TTL`); cookie Max-Age
+                 *     совпадает с TTL сессии и обновляется на аутентифицированных запросах.
                  */
                 "X-CSRF-Token": components["parameters"]["CSRFToken"];
             };
@@ -740,7 +739,8 @@ export interface operations {
                  * @description CSRF token для mutating запросов с cookie-сессией.
                  *     Выпускается сервером (HMAC от session token и часового timestamp),
                  *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
-                 *     Токен принимается в окне ±1 час; cookie обновляется на аутентифицированных запросах.
+                 *     Токен принимается в окне жизни сессии (`SESSION_TTL`); cookie Max-Age
+                 *     совпадает с TTL сессии и обновляется на аутентифицированных запросах.
                  */
                 "X-CSRF-Token": components["parameters"]["CSRFToken"];
             };
@@ -807,7 +807,8 @@ export interface operations {
                  * @description CSRF token для mutating запросов с cookie-сессией.
                  *     Выпускается сервером (HMAC от session token и часового timestamp),
                  *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
-                 *     Токен принимается в окне ±1 час; cookie обновляется на аутентифицированных запросах.
+                 *     Токен принимается в окне жизни сессии (`SESSION_TTL`); cookie Max-Age
+                 *     совпадает с TTL сессии и обновляется на аутентифицированных запросах.
                  */
                 "X-CSRF-Token": components["parameters"]["CSRFToken"];
             };
@@ -844,7 +845,8 @@ export interface operations {
                  * @description CSRF token для mutating запросов с cookie-сессией.
                  *     Выпускается сервером (HMAC от session token и часового timestamp),
                  *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
-                 *     Токен принимается в окне ±1 час; cookie обновляется на аутентифицированных запросах.
+                 *     Токен принимается в окне жизни сессии (`SESSION_TTL`); cookie Max-Age
+                 *     совпадает с TTL сессии и обновляется на аутентифицированных запросах.
                  */
                 "X-CSRF-Token": components["parameters"]["CSRFToken"];
             };
@@ -920,7 +922,8 @@ export interface operations {
                  * @description CSRF token для mutating запросов с cookie-сессией.
                  *     Выпускается сервером (HMAC от session token и часового timestamp),
                  *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
-                 *     Токен принимается в окне ±1 час; cookie обновляется на аутентифицированных запросах.
+                 *     Токен принимается в окне жизни сессии (`SESSION_TTL`); cookie Max-Age
+                 *     совпадает с TTL сессии и обновляется на аутентифицированных запросах.
                  */
                 "X-CSRF-Token": components["parameters"]["CSRFToken"];
             };

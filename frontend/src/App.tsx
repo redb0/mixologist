@@ -1,31 +1,17 @@
-import LocalBarIcon from "@mui/icons-material/LocalBar";
-import MenuIcon from "@mui/icons-material/Menu";
-import ScienceIcon from "@mui/icons-material/Science";
-import {
-  AppBar,
-  Box,
-  CircularProgress,
-  Container,
-  Divider,
-  Drawer,
-  IconButton,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Toolbar,
-  Typography,
-} from "@mui/material";
-import { lazy, Suspense, useState } from "react";
-import {
-  BrowserRouter,
-  Link as RouterLink,
-  Navigate,
-  Route,
-  Routes,
-  useLocation,
-} from "react-router-dom";
-const drawerWidth = 240;
+import { lazy, Suspense } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { AdminLayout } from "./app/AdminLayout";
+import { UserLayout } from "./app/UserLayout";
+import { AuthLoading } from "./features/auth/AuthLoading";
+import { AuthProvider } from "./features/auth/AuthProvider";
+import { RequireAuth } from "./features/auth/RequireAuth";
+import { RequireAdmin, RequireUser } from "./features/auth/RequireRole";
+import { AuthCallbackPage } from "./pages/AuthCallbackPage";
+import { AuthErrorPage } from "./pages/AuthErrorPage";
+import { LoginPage } from "./pages/LoginPage";
+import { LogoutPage } from "./pages/LogoutPage";
+import { UserHomePage } from "./pages/UserHomePage";
+
 const IngredientsListPage = lazy(() =>
   import("./pages/IngredientsListPage").then((module) => ({
     default: module.IngredientsListPage,
@@ -42,96 +28,19 @@ const IngredientFormPage = lazy(() =>
   })),
 );
 
-function Navigation({ onNavigate }: { onNavigate: () => void }) {
-  const location = useLocation();
+export function AppRoutes() {
   return (
-    <Box>
-      <Toolbar sx={{ gap: 1 }}>
-        <LocalBarIcon color="primary" />
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
-          Mixologist
-        </Typography>
-      </Toolbar>
-      <Divider />
-      <List sx={{ px: 1 }}>
-        <ListItemButton
-          component={RouterLink}
-          to="/ingredients"
-          selected={location.pathname.startsWith("/ingredients")}
-          onClick={onNavigate}
-        >
-          <ListItemIcon>
-            <ScienceIcon />
-          </ListItemIcon>
-          <ListItemText primary="Ингредиенты" />
-        </ListItemButton>
-      </List>
-    </Box>
-  );
-}
+    <Suspense fallback={<AuthLoading />}>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/auth/error" element={<AuthErrorPage />} />
 
-function AdminLayout() {
-  const [mobileOpen, setMobileOpen] = useState(false);
+        <Route element={<RequireAuth />}>
+          <Route path="/logout" element={<LogoutPage />} />
 
-  return (
-    <Box sx={{ display: "flex", minHeight: "100vh" }}>
-      <AppBar
-        position="fixed"
-        color="inherit"
-        sx={{ display: { md: "none" }, boxShadow: 1 }}
-      >
-        <Toolbar>
-          <IconButton
-            edge="start"
-            onClick={() => setMobileOpen(true)}
-            aria-label="Открыть меню"
-          >
-            <MenuIcon />
-          </IconButton>
-          <Typography variant="h6" sx={{ ml: 1 }}>
-            Mixologist
-          </Typography>
-        </Toolbar>
-      </AppBar>
-      <Drawer
-        variant="temporary"
-        open={mobileOpen}
-        onClose={() => setMobileOpen(false)}
-        sx={{
-          display: { xs: "block", md: "none" },
-          "& .MuiDrawer-paper": { width: drawerWidth },
-        }}
-      >
-        <Navigation onNavigate={() => setMobileOpen(false)} />
-      </Drawer>
-      <Drawer
-        variant="permanent"
-        sx={{
-          display: { xs: "none", md: "block" },
-          width: drawerWidth,
-          flexShrink: 0,
-          "& .MuiDrawer-paper": { width: drawerWidth, boxSizing: "border-box" },
-        }}
-      >
-        <Navigation onNavigate={() => undefined} />
-      </Drawer>
-      <Box
-        component="main"
-        sx={{ flex: 1, minWidth: 0, pt: { xs: 10, md: 4 }, pb: 6 }}
-      >
-        <Container maxWidth="xl">
-          <Suspense
-            fallback={
-              <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-                <CircularProgress />
-              </Box>
-            }
-          >
-            <Routes>
-              <Route
-                path="/"
-                element={<Navigate to="/ingredients" replace />}
-              />
+          <Route element={<RequireAdmin />}>
+            <Route element={<AdminLayout />}>
               <Route path="/ingredients" element={<IngredientsListPage />} />
               <Route path="/ingredients/new" element={<IngredientFormPage />} />
               <Route
@@ -142,22 +51,28 @@ function AdminLayout() {
                 path="/ingredients/:id/edit"
                 element={<IngredientFormPage />}
               />
-              <Route
-                path="*"
-                element={<Navigate to="/ingredients" replace />}
-              />
-            </Routes>
-          </Suspense>
-        </Container>
-      </Box>
-    </Box>
+            </Route>
+          </Route>
+
+          <Route element={<RequireUser />}>
+            <Route element={<UserLayout />}>
+              <Route path="/" element={<UserHomePage />} />
+            </Route>
+          </Route>
+        </Route>
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
 }
 
 function App() {
   return (
     <BrowserRouter>
-      <AdminLayout />
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
     </BrowserRouter>
   );
 }

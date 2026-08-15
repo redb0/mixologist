@@ -21,6 +21,7 @@ const (
 	csrfMACPrefix        = "csrf-v1:"
 	csrfHourSeconds      = int64(3600)
 	csrfHourSkew         = int64(1)
+	csrfCookieMaxAge     = int((csrfHourSkew + 1) * csrfHourSeconds)
 )
 
 func SignCSRFToken(secret, sessionToken string, now time.Time) string {
@@ -54,7 +55,7 @@ func SetCSRFCookie(c *gin.Context, cfg config.AuthConfig, sessionToken string, n
 	c.SetCookie(
 		cfg.CSRFCookieName,
 		SignCSRFToken(cfg.CSRFSecret, sessionToken, now),
-		int(cfg.SessionTTL.Seconds()),
+		csrfCookieMaxAge,
 		"/",
 		cfg.SessionCookieDomain,
 		cfg.SessionCookieSecure,

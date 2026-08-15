@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -397,6 +398,7 @@ func TestRequireAuth_RefreshesCSRFCookie(t *testing.T) {
 		if strings.HasPrefix(header, cfg.CSRFCookieName+"=") && strings.Contains(header, expected) {
 			found = true
 			assert.NotContains(t, header, "HttpOnly")
+			assert.Contains(t, header, "Max-Age="+strconv.Itoa(csrfCookieMaxAge))
 			break
 		}
 	}

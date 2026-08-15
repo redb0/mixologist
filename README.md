@@ -70,6 +70,20 @@ cp .env.example .env
 `SESSION_COOKIE_*`, `SESSION_TTL`, `CSRF_*`. Реальные секреты не коммитьте;
 в Docker Compose используются dev-placeholder значения, если переменные не заданы.
 
+Подробнее о ролях, cookies и sequence flow — в [ARCH.md](ARCH.md#авторизация).
+
+### Настройка Google OAuth
+
+1. Создайте OAuth 2.0 Client (Web application) в [Google Cloud Console](https://console.cloud.google.com/).
+2. Добавьте **Authorized redirect URI**:
+   - Docker / production-like: `http://localhost:8080/api/v1/auth/google/callback`
+   - Vite dev: `http://localhost:5173/api/v1/auth/google/callback`
+3. Скопируйте Client ID и Client Secret в `.env`.
+4. Задайте `AUTH_ADMIN_EMAILS` — список email администраторов разделенных запятыми.
+5. Сгенерируйте случайные `SESSION_COOKIE_SECRET` и `CSRF_SECRET` (минимум 32 символа каждый).
+
+После входа admin попадает в `/ingredients`, обычный пользователь — на `/`.
+
 ### 3. Миграции
 
 Примените миграции (см. раздел [Миграции](#миграции)).

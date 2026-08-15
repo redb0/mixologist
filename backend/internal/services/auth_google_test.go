@@ -275,3 +275,15 @@ type timeoutError struct{}
 func (timeoutError) Error() string   { return "i/o timeout" }
 func (timeoutError) Timeout() bool   { return true }
 func (timeoutError) Temporary() bool { return true }
+
+func TestGoogleIDTokenValidator_InvalidToken(t *testing.T) {
+	validator := NewGoogleIDTokenValidator()
+
+	_, err := validator.Validate(context.Background(), "not-a-jwt", "google-client-id")
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("expected unauthorized error, got %v", err)
+	}
+}

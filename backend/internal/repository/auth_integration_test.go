@@ -253,6 +253,133 @@ func (suite *AuthRepositoryTestSuite) TestGetActiveByTokenHash_ExpiredSession() 
 	assert.True(t, errors.Is(err, domain.ErrNotFound))
 }
 
+func (suite *AuthRepositoryTestSuite) TestRevokeByTokenHash_NotFound() {
+	t := suite.T()
+	err := suite.sessions.RevokeByTokenHash(suite.ctx, "missing-hash", time.Now().UTC())
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
+}
+
+func (suite *AuthRepositoryTestSuite) TestRevokeByTokenHash_ExpiredSession() {
+	t := suite.T()
+	user, err := suite.users.UpsertGoogleUser(
+		suite.ctx,
+		domain.GoogleIdentity{
+			Subject:     "google-subject-1",
+			Email:       "user@example.com",
+			DisplayName: "User One",
+			AvatarURL:   "",
+		},
+		domain.UserRoleUser,
+		time.Now(),
+	)
+	assert.NoError(t, err)
+
+	now := time.Now().UTC()
+	_, err = suite.sessions.Create(suite.ctx, &domain.Session{
+		TokenHash: "expired-revoke",
+		UserID:    user.ID,
+		ExpiresAt: now.Add(-time.Minute),
+		Metadata:  map[string]any{},
+	})
+	assert.NoError(t, err)
+
+	err = suite.sessions.RevokeByTokenHash(suite.ctx, "expired-revoke", now)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
+}
+
+func (suite *AuthRepositoryTestSuite) TestGetActiveByTokenHash_NotFound() {
+	t := suite.T()
+	session, err := suite.sessions.GetActiveByTokenHash(suite.ctx, "missing-hash", time.Now().UTC())
+	assert.Nil(t, session)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
+}
+
+func (suite *AuthRepositoryTestSuite) TestCreateSession_InvalidMetadataKey() {
+	t := suite.T()
+	user, err := suite.users.UpsertGoogleUser(
+		suite.ctx,
+		domain.GoogleIdentity{
+			Subject:     "google-subject-1",
+			Email:       "user@example.com",
+			DisplayName: "User One",
+			AvatarURL:   "",
+		},
+		domain.UserRoleUser,
+		time.Now(),
+	)
+	assert.NoError(t, err)
+
+	now := time.Now().UTC()
+	_, err = suite.sessions.Create(suite.ctx, &domain.Session{
+		TokenHash: "hash-invalid-meta",
+		UserID:    user.ID,
+		ExpiresAt: now.Add(time.Hour),
+		Metadata:  map[string]any{"": "value"},
+	})
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrInvalidAuthData))
+}
+
+func (suite *AuthRepositoryTestSuite) TestRevokeByTokenHash_AlreadyRevoked() {
+	t := suite.T()
+	user, err := suite.users.UpsertGoogleUser(
+		suite.ctx,
+		domain.GoogleIdentity{
+			Subject:     "google-subject-1",
+			Email:       "user@example.com",
+			DisplayName: "User One",
+			AvatarURL:   "",
+		},
+		domain.UserRoleUser,
+		time.Now(),
+	)
+	assert.NoError(t, err)
+
+	now := time.Now().UTC()
+	_, err = suite.sessions.Create(suite.ctx, &domain.Session{
+		TokenHash: "revoked-twice",
+		UserID:    user.ID,
+		ExpiresAt: now.Add(time.Hour),
+		Metadata:  map[string]any{},
+	})
+	assert.NoError(t, err)
+
+	err = suite.sessions.RevokeByTokenHash(suite.ctx, "revoked-twice", now)
+	assert.NoError(t, err)
+
+	err = suite.sessions.RevokeByTokenHash(suite.ctx, "revoked-twice", now.Add(time.Minute))
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
+}
+
+func (suite *AuthRepositoryTestSuite) TestCreateSession_NilMetadata() {
+	t := suite.T()
+	user, err := suite.users.UpsertGoogleUser(
+		suite.ctx,
+		domain.GoogleIdentity{
+			Subject:     "google-subject-1",
+			Email:       "user@example.com",
+			DisplayName: "User One",
+			AvatarURL:   "",
+		},
+		domain.UserRoleUser,
+		time.Now(),
+	)
+	assert.NoError(t, err)
+
+	now := time.Now().UTC()
+	created, err := suite.sessions.Create(suite.ctx, &domain.Session{
+		TokenHash: "hash-nil-meta",
+		UserID:    user.ID,
+		ExpiresAt: now.Add(time.Hour),
+	})
+	assert.NoError(t, err)
+	assert.NotNil(t, created.Metadata)
+}
+
 func (suite *AuthRepositoryTestSuite) TestCleanupExpiredOrRevoked() {
 	t := suite.T()
 	user, err := suite.users.UpsertGoogleUser(

@@ -879,6 +879,54 @@ func TestAuthController_HandleGoogleCallback_IdentityValidatorUnavailable(t *tes
 	assertAuthErrorRedirect(t, w, httperr.CodeServiceUnavailable)
 }
 
+func TestAuthController_HandleGoogleCallback_UpsertInternalError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	controller := NewAuthController(
+		&mockAuthService{
+			googleIdentityFromIDToken: func(ctx context.Context, rawIDToken string, expectedNonce string) (domain.GoogleIdentity, error) {
+				return domain.GoogleIdentity{
+					Subject:     "subject-1",
+					Email:       "user@example.com",
+					DisplayName: "Test User",
+				}, nil
+			},
+			upsertGoogleUser: func(ctx context.Context, identity domain.GoogleIdentity, loginAt time.Time) (*domain.User, error) {
+				return nil, errors.New("db unavailable")
+			},
+		},
+		&mockGoogleOAuthClient{
+			completeAuth: func(ctx context.Context, sessionData string, code string) (string, error) {
+				return "signed-id-token", nil
+			},
+		},
+		testAuthConfig(),
+	)
+	controller.now = func() time.Time { return time.Unix(1700000000, 0).UTC() }
+
+	cookieValue, err := buildOAuthStateCookie(oauthStatePayload{
+		State:        "state-1",
+		Nonce:        "nonce-1",
+		ReturnTo:     "/ingredients",
+		OAuthSession: "oauth-session",
+		ExpiresAt:    controller.now().Add(oauthStateTTL).Unix(),
+	}, testAuthConfig().SessionCookieSecret)
+	if err != nil {
+		t.Fatalf("build oauth state cookie: %v", err)
+	}
+
+	r := gin.New()
+	r.Use(requestid.New())
+	r.GET("/api/v1/auth/google/callback", controller.HandleGoogleCallback)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/google/callback?code=ok&state=state-1", nil)
+	req.AddCookie(&http.Cookie{Name: oauthStateCookieName, Value: cookieValue})
+	r.ServeHTTP(w, req)
+
+	assertAuthErrorRedirect(t, w, httperr.CodeInternalError)
+}
+
 func TestAuthController_HandleGoogleCallback_CreateSessionError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -948,6 +996,78 @@ func TestGoogleOAuthClient_CompleteAuth_RespectsContext(t *testing.T) {
 	}
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+}
+
+func TestGoogleOAuthClient_CompleteAuth_InvalidSessionData(t *testing.T) {
+	client := NewGoogleOAuthClient(testAuthConfig())
+
+	_, err := client.CompleteAuth(context.Background(), "not-json", "code")
+	if err == nil {
+		t.Fatal("expected error for invalid session data")
+	}
+}
+
+func TestContextHTTPClient_UsesRequestContext(t *testing.T) {
+	var gotCtx context.Context
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCtx = r.Context()
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	client := contextHTTPClient(ctx)
+	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("do request: %v", err)
+	}
+	_ = resp.Body.Close()
+	if gotCtx == nil {
+		t.Fatal("expected request context to be set")
+	}
+}
+
+func TestAuthController_GetCurrentUser_MissingContextUser(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	controller := NewAuthController(&mockAuthService{}, &mockGoogleOAuthClient{}, testAuthConfig())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+
+	controller.GetCurrentUser(c)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("unexpected status: %d", w.Code)
+	}
+}
+
+func TestAuthController_GetCurrentUser_NoUserFromMiddleware(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := testAuthConfig()
+	authService := &mockAuthService{
+		getUserBySessionToken: func(ctx context.Context, rawToken string, now time.Time) (*domain.User, error) {
+			return nil, nil
+		},
+	}
+	controller := NewAuthController(authService, &mockGoogleOAuthClient{}, cfg)
+	r := newProtectedAuthEngine(controller, authService, cfg)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	req.AddCookie(&http.Cookie{Name: cfg.SessionCookieName, Value: "session-token"})
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("unexpected status: %d", w.Code)
 	}
 }
 
@@ -1026,6 +1146,11 @@ func TestOAuthStateCookie_RoundTripAndRejectsTampering(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for malformed cookie")
 	}
+
+	_, err = parseOAuthStateCookie("%%%."+strings.Repeat("0", 64), secret)
+	if err == nil {
+		t.Fatal("expected error for invalid payload base64")
+	}
 }
 
 func TestParseOAuthStateCookie_IncompletePayload(t *testing.T) {
@@ -1056,6 +1181,21 @@ func TestGoogleOAuthClient_BeginAuth_RequiresStateAndNonce(t *testing.T) {
 	_, _, err = client.BeginAuth("state", "  ")
 	if !errors.Is(err, domain.ErrInvalidAuthData) {
 		t.Fatalf("expected invalid auth data for empty nonce, got %v", err)
+	}
+}
+
+func TestGoogleOAuthClient_BeginAuth_Success(t *testing.T) {
+	client := NewGoogleOAuthClient(testAuthConfig())
+
+	authURL, sessionData, err := client.BeginAuth("state-1", "nonce-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if authURL == "" || sessionData == "" {
+		t.Fatal("auth URL and session data must be returned")
+	}
+	if !strings.Contains(authURL, "nonce=nonce-1") {
+		t.Fatalf("auth URL must include nonce: %q", authURL)
 	}
 }
 

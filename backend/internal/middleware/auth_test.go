@@ -527,6 +527,54 @@ func hasSessionCookie(cookies []*http.Cookie, name string) bool {
 	return false
 }
 
+func TestRequireAuth_NilUserFromLookup(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := testAuthConfig()
+	lookup := &stubSessionLookup{user: nil}
+	r := gin.New()
+	r.Use(requestid.New(), RequireAuth(lookup, cfg, func() time.Time { return csrfTestNow }))
+	r.GET("/me", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/me", nil)
+	req.AddCookie(&http.Cookie{Name: cfg.SessionCookieName, Value: "user-token"})
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestValidCSRFToken_ZeroMaxAgeUsesMinimumSkew(t *testing.T) {
+	secret := strings.Repeat("a", 32)
+	session := "session-token"
+	token := SignCSRFToken(secret, session, csrfTestNow)
+	assert.True(t, ValidCSRFToken(secret, session, token, csrfTestNow, 0))
+}
+
+func TestSetCSRFCookie_ZeroTTLUsesFallbackMaxAge(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := testAuthConfig()
+	cfg.SessionTTL = 0
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/me", nil)
+
+	SetCSRFCookie(c, cfg, "session-token", csrfTestNow)
+
+	found := false
+	for _, header := range w.Header().Values("Set-Cookie") {
+		if strings.HasPrefix(header, cfg.CSRFCookieName+"=") {
+			found = true
+			assert.Contains(t, header, "Max-Age=")
+			break
+		}
+	}
+	assert.True(t, found)
+}
+
 func testAuthConfig() config.AuthConfig {
 	return config.AuthConfig{
 		SessionCookieName:   "session",

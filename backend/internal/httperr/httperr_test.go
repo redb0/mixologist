@@ -1,14 +1,18 @@
 package httperr_test
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/redb0/mixologist/internal/domain"
 	"github.com/redb0/mixologist/internal/httperr"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMap(t *testing.T) {
@@ -120,4 +124,56 @@ func TestMap(t *testing.T) {
 			assert.Equal(t, tt.wantMsg, msg)
 		})
 	}
+}
+
+func TestWriteAndWriteError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/test", nil)
+	c.Set("X-Request-ID", "req-1")
+
+	httperr.Write(c, http.StatusBadRequest, httperr.CodeValidationError, "bad input")
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	var body httperr.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.Equal(t, httperr.CodeValidationError, body.Error.Code)
+	assert.Equal(t, "bad input", body.Error.Message)
+
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/test", nil)
+	httperr.WriteError(c, domain.NewErrNotFound("не найдено"))
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.Equal(t, httperr.CodeNotFound, body.Error.Code)
+}
+
+func TestAbortAndAbortError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/test", nil)
+
+	httperr.Abort(c, http.StatusForbidden, httperr.CodeForbidden, "запрещено")
+
+	assert.True(t, c.IsAborted())
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	var body httperr.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.Equal(t, httperr.CodeForbidden, body.Error.Code)
+
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/test", nil)
+	httperr.AbortError(c, domain.NewErrUnauthorized("нет доступа"))
+
+	assert.True(t, c.IsAborted())
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.Equal(t, httperr.CodeUnauthorized, body.Error.Code)
 }

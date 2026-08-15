@@ -100,13 +100,26 @@ func TestNew_BuildsRouterWhenDependenciesAreValid(t *testing.T) {
 	deps := Dependencies{
 		HealthController:     &handlers.HealthController{},
 		IngredientController: &handlers.IngredientController{},
-		AuthService:          services.NewAuthService(nil, nil, nil, nil, ""),
-		AuthConfig:           testAuthConfig(),
+		AuthController: handlers.NewAuthController(
+			services.NewAuthService(nil, nil, nil, nil, ""),
+			handlers.NewGoogleOAuthClient(testGoogleAuthConfig()),
+			testGoogleAuthConfig(),
+		),
+		AuthService: services.NewAuthService(nil, nil, nil, nil, ""),
+		AuthConfig:  testAuthConfig(),
 	}
 
 	if New(deps) == nil {
 		t.Fatal("expected router instance")
 	}
+}
+
+func testGoogleAuthConfig() config.AuthConfig {
+	cfg := testAuthConfig()
+	cfg.GoogleClientID = "google-client-id"
+	cfg.GoogleClientSecret = "google-client-secret"
+	cfg.GoogleCallbackURL = "http://localhost:8080/api/v1/auth/google/callback"
+	return cfg
 }
 
 func testAuthConfig() config.AuthConfig {

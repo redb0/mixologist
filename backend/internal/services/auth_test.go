@@ -296,6 +296,33 @@ func TestAuthService_UpsertGoogleUser_AssignsUserRoleOutsideAllowlist(t *testing
 	}
 }
 
+func TestAuthService_UpsertGoogleUser_RepositoryError(t *testing.T) {
+	repoErr := errors.New("db unavailable")
+	users := &mockUserRepository{
+		upsertGoogleUser: func(
+			ctx context.Context,
+			identity domain.GoogleIdentity,
+			role domain.UserRole,
+			loginAt time.Time,
+		) (*domain.User, error) {
+			return nil, repoErr
+		},
+	}
+	service := newTestAuthService(users, &mockSessionRepository{}, nil, nil)
+
+	user, err := service.UpsertGoogleUser(context.Background(), domain.GoogleIdentity{
+		Subject:     "google-subject",
+		Email:       "user@example.com",
+		DisplayName: "Regular User",
+	}, time.Now())
+	if user != nil {
+		t.Fatal("user should be nil")
+	}
+	if !errors.Is(err, repoErr) {
+		t.Fatalf("expected repository error, got %v", err)
+	}
+}
+
 func TestAuthService_UpsertGoogleUser_Validation(t *testing.T) {
 	service := newTestAuthService(&mockUserRepository{}, &mockSessionRepository{}, nil, nil)
 	tests := []struct {
@@ -401,6 +428,41 @@ func TestAuthService_CleanupExpiredOrRevokedSessions(t *testing.T) {
 	}
 	if deleted != 3 {
 		t.Fatalf("deleted count mismatch: got %d", deleted)
+	}
+}
+
+func TestAuthService_GoogleIdentityFromIDToken_EmptySubject(t *testing.T) {
+	validClaims := IDTokenClaims{
+		Subject:       "   ",
+		Nonce:         "nonce-1",
+		Email:         "user@example.com",
+		EmailVerified: true,
+		Name:          "User",
+	}
+	service := newTestAuthService(&mockUserRepository{}, &mockSessionRepository{}, nil, &mockIDTokenValidator{
+		validate: func(ctx context.Context, idToken string, audience string) (IDTokenClaims, error) {
+			return validClaims, nil
+		},
+	})
+
+	_, err := service.GoogleIdentityFromIDToken(context.Background(), "token", "nonce-1")
+	if !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("expected unauthorized error, got %v", err)
+	}
+}
+
+func TestAuthService_CleanupExpiredOrRevokedSessions_Error(t *testing.T) {
+	repoErr := errors.New("db unavailable")
+	repo := &mockSessionRepository{
+		cleanup: func(ctx context.Context, now time.Time) (int64, error) {
+			return 0, repoErr
+		},
+	}
+	service := newTestAuthService(&mockUserRepository{}, repo, nil, nil)
+
+	_, err := service.CleanupExpiredOrRevokedSessions(context.Background(), time.Now())
+	if !errors.Is(err, repoErr) {
+		t.Fatalf("expected repository error, got %v", err)
 	}
 }
 

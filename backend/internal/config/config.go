@@ -98,8 +98,8 @@ func loadAuthConfig(ginMode string) (AuthConfig, error) {
 		SessionCookieSecret: strings.TrimSpace(os.Getenv("SESSION_COOKIE_SECRET")),
 		SessionCookieDomain: strings.TrimSpace(os.Getenv("SESSION_COOKIE_DOMAIN")),
 		CSRFSecret:          strings.TrimSpace(os.Getenv("CSRF_SECRET")),
-		CSRFCookieName:      envOrDefault("CSRF_COOKIE_NAME", defaultCSRFCookieName),
-		CSRFHeaderName:      envOrDefault("CSRF_HEADER_NAME", defaultCSRFHeaderName),
+		CSRFCookieName:      defaultCSRFCookieName,
+		CSRFHeaderName:      defaultCSRFHeaderName,
 	}
 
 	if cfg.GoogleClientID == "" {
@@ -173,12 +173,6 @@ func loadAuthConfig(ginMode string) (AuthConfig, error) {
 
 	if cfg.SessionCookieName == "" {
 		return AuthConfig{}, errors.New("SESSION_COOKIE_NAME cannot be empty")
-	}
-	if cfg.CSRFCookieName == "" {
-		return AuthConfig{}, errors.New("CSRF_COOKIE_NAME cannot be empty")
-	}
-	if cfg.CSRFHeaderName == "" {
-		return AuthConfig{}, errors.New("CSRF_HEADER_NAME cannot be empty")
 	}
 
 	return cfg, nil

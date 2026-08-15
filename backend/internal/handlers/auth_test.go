@@ -1009,28 +1009,23 @@ func TestGoogleOAuthClient_CompleteAuth_InvalidSessionData(t *testing.T) {
 }
 
 func TestContextHTTPClient_UsesRequestContext(t *testing.T) {
-	var gotCtx context.Context
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotCtx = r.Context()
+		t.Error("handler must not be called when context is canceled")
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(server.Close)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cancel()
 
 	client := contextHTTPClient(ctx)
 	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("do request: %v", err)
-	}
-	_ = resp.Body.Close()
-	if gotCtx == nil {
-		t.Fatal("expected request context to be set")
+
+	if _, err = client.Do(req); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
 	}
 }
 

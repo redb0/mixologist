@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
 	"github.com/redb0/mixologist/internal/domain"
 	"github.com/redb0/mixologist/internal/httperr"
@@ -128,11 +129,12 @@ func TestMap(t *testing.T) {
 
 func TestWriteAndWriteError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	_ = requestid.New()
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/test", nil)
-	c.Set("X-Request-ID", "req-1")
+	c.Request.Header.Set("X-Request-ID", "req-1")
 
 	httperr.Write(c, http.StatusBadRequest, httperr.CodeValidationError, "bad input")
 
@@ -141,6 +143,7 @@ func TestWriteAndWriteError(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	assert.Equal(t, httperr.CodeValidationError, body.Error.Code)
 	assert.Equal(t, "bad input", body.Error.Message)
+	assert.Equal(t, "req-1", body.Error.RequestID)
 
 	w = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)

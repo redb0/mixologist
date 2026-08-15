@@ -29,8 +29,6 @@ func setValidAuthEnv(t *testing.T) {
 	t.Setenv("SESSION_COOKIE_SECURE", "")
 	t.Setenv("SESSION_TTL", "")
 	t.Setenv("CSRF_SECRET", strings.Repeat("b", 32))
-	t.Setenv("CSRF_COOKIE_NAME", "")
-	t.Setenv("CSRF_HEADER_NAME", "")
 }
 
 func clearAuthEnv(t *testing.T) {
@@ -46,8 +44,6 @@ func clearAuthEnv(t *testing.T) {
 		"SESSION_COOKIE_SECURE",
 		"SESSION_TTL",
 		"CSRF_SECRET",
-		"CSRF_COOKIE_NAME",
-		"CSRF_HEADER_NAME",
 	} {
 		t.Setenv(key, "")
 	}
@@ -386,8 +382,6 @@ func TestLoad_authDefaultsAndOverrides(t *testing.T) {
 	t.Setenv("SESSION_COOKIE_DOMAIN", "localhost")
 	t.Setenv("SESSION_COOKIE_SECURE", "true")
 	t.Setenv("SESSION_TTL", "24h")
-	t.Setenv("CSRF_COOKIE_NAME", "mixologist_csrf")
-	t.Setenv("CSRF_HEADER_NAME", "X-Mixologist-CSRF")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -395,8 +389,8 @@ func TestLoad_authDefaultsAndOverrides(t *testing.T) {
 	assert.Equal(t, "localhost", cfg.Auth.SessionCookieDomain)
 	assert.True(t, cfg.Auth.SessionCookieSecure)
 	assert.Equal(t, 24*time.Hour, cfg.Auth.SessionTTL)
-	assert.Equal(t, "mixologist_csrf", cfg.Auth.CSRFCookieName)
-	assert.Equal(t, "X-Mixologist-CSRF", cfg.Auth.CSRFHeaderName)
+	assert.Equal(t, defaultCSRFCookieName, cfg.Auth.CSRFCookieName)
+	assert.Equal(t, defaultCSRFHeaderName, cfg.Auth.CSRFHeaderName)
 }
 
 func TestParseAdminEmails_deduplicatesAndAllowsEmptyList(t *testing.T) {

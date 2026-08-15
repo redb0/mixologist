@@ -134,8 +134,8 @@ Backend выполняет Google OAuth и выдаёт opaque HttpOnly cookie-�
 | `SESSION_COOKIE_SECURE`     | нет            | `true`/`false`; в `GIN_MODE=release` принудительно `true`                          |
 | `SESSION_TTL`               | нет            | TTL сессии, default `168h`                                                         |
 | `CSRF_SECRET`               | да             | HMAC-секрет CSRF token (≥ 32 символов, отдельно от session secret)                 |
-| `CSRF_COOKIE_NAME`          | нет            | Имя CSRF cookie, default `csrf_token`                                              |
-| `CSRF_HEADER_NAME`          | нет            | Заголовок CSRF, default `X-CSRF-Token`                                             |
+
+Имена CSRF cookie (`csrf_token`) и заголовка (`X-CSRF-Token`) — фиксированный контракт с frontend, не настраиваются через env.
 
 Для Vite dev (`:5173`) callback URL должен быть same-origin со SPA, например `http://localhost:5173/api/v1/auth/google/callback`, чтобы OAuth redirect и cookie оставались на одном origin.
 

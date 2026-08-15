@@ -66,6 +66,22 @@ func TestValidateListParams(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "page size min boundary",
+			params: domain.IngredientListParams{
+				PageSize: 1,
+				Sort:     domain.ByCreatedAt,
+				Order:    domain.Desc,
+			},
+		},
+		{
+			name: "page size max boundary",
+			params: domain.IngredientListParams{
+				PageSize: 100,
+				Sort:     domain.ByCreatedAt,
+				Order:    domain.Desc,
+			},
+		},
+		{
 			name: "page size too large",
 			params: domain.IngredientListParams{
 				PageSize: 101,

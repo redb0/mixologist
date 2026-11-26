@@ -164,8 +164,8 @@ export interface paths {
         post?: never;
         /**
          * Удалить ингредиент
-         * @description При использовании ингредиента в рецептах возвращается `409 RESOURCE_IN_USE`
-         *     (реальные FK появятся вместе с recipes).
+         * @description Если ингредиент входит в состав хотя бы одного рецепта, возвращается
+         *     `409 RESOURCE_IN_USE`.
          *
          *     Права: только `admin`.
          */
@@ -206,6 +206,133 @@ export interface paths {
         put: operations["putIngredientIcon"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recipes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Каталог опубликованных рецептов
+         * @description Только рецепты со статусом `published`, сортировка `published_at DESC`
+         *     (tie-breaker `id DESC`), token-based (keyset) пагинация.
+         *     Карточка не содержит состав и инструкции.
+         *
+         *     Публичный endpoint: аутентификация не требуется.
+         */
+        get: operations["listRecipes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recipes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Идентификатор рецепта (положительное целое) */
+                id: components["parameters"]["RecipeID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Опубликованный рецепт по ID
+         * @description Черновик и отсутствующий рецепт неразличимы: оба возвращают `404 NOT_FOUND`.
+         *
+         *     Публичный endpoint: аутентификация не требуется.
+         */
+        get: operations["getRecipe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/recipes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Список всех рецептов
+         * @description Черновики и опубликованные рецепты, сортировка `updated_at DESC`
+         *     (tie-breaker `id DESC`), token-based (keyset) пагинация.
+         *
+         *     Права: только `admin`.
+         */
+        get: operations["listAdminRecipes"];
+        put?: never;
+        /**
+         * Создать черновик рецепта
+         * @description Новый рецепт всегда создаётся со статусом `draft`; состав и инструкции
+         *     могут быть пустыми. `author_id` берётся из сессии.
+         *     Публикация — через `PUT` с `status: published`.
+         *
+         *     Несуществующий или повторяющийся `ingredient_id` в составе — `400 VALIDATION_ERROR`.
+         *
+         *     Права: только `admin`.
+         */
+        post: operations["createRecipe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/recipes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Идентификатор рецепта (положительное целое) */
+                id: components["parameters"]["RecipeID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Рецепт по ID в любом статусе
+         * @description Права: только `admin`.
+         */
+        get: operations["getAdminRecipe"];
+        /**
+         * Заменить рецепт целиком
+         * @description Полный снимок рецепта: метаданные, состав и инструкции заменяются
+         *     в одной транзакции. Ошибка любой части не меняет сохранённый рецепт.
+         *
+         *     Optimistic locking: `version` должен совпадать с текущей версией,
+         *     иначе `409 VERSION_CONFLICT`.
+         *
+         *     Публикация и снятие с публикации — полем `status`. Для `published`
+         *     нужны хотя бы один ингредиент и одна инструкция, иначе `400 VALIDATION_ERROR`.
+         *     Переход в `published` выставляет новое `published_at`, переход в `draft` очищает его.
+         *
+         *     Несуществующий или повторяющийся `ingredient_id` в составе — `400 VALIDATION_ERROR`.
+         *
+         *     Права: только `admin`.
+         */
+        put: operations["updateRecipe"];
+        post?: never;
+        /**
+         * Удалить рецепт
+         * @description Физически удаляет рецепт вместе с составом и инструкциями.
+         *
+         *     Права: только `admin`.
+         */
+        delete: operations["deleteRecipe"];
         options?: never;
         head?: never;
         patch?: never;
@@ -312,6 +439,156 @@ export interface components {
             unit_measurement?: components["schemas"]["UnitMeasurement"];
             abv?: components["schemas"]["Abv"];
             ingredient_type?: components["schemas"]["IngredientType"];
+        };
+        /**
+         * @description `draft` — виден только admin, может быть неполным.
+         *     `published` — виден в публичном каталоге.
+         * @enum {string}
+         */
+        RecipeStatus: "draft" | "published";
+        /** @description Название рецепта, не уникально; не может состоять из одних пробелов */
+        RecipeTitle: string;
+        /** @description Краткое описание, plain text без Markdown */
+        RecipeDescription: string;
+        /** @description Количество порций; `null` — не указано */
+        RecipeServings: number | null;
+        /** @description Время приготовления в минутах; `null` — не указано */
+        RecipePrepTimeMinutes: number | null;
+        /**
+         * @description Положительное десятичное количество от `0.01` до `99999999.99`, не более двух
+         *     знаков после точки (например `30`, `12.5`, `0.25`). Ноль не допускается.
+         *     Передаётся строкой, чтобы не терять точность.
+         * @example 12.5
+         */
+        RecipeAmount: string;
+        RecipeIngredientInput: {
+            /** @description Ингредиент из каталога; повтор в одном рецепте — `VALIDATION_ERROR` */
+            ingredient_id: number;
+            amount: components["schemas"]["RecipeAmount"];
+            unit: components["schemas"]["UnitMeasurement"];
+            /** @default false */
+            optional: boolean;
+        };
+        RecipeIngredient: {
+            ingredient_id: number;
+            ingredient_name: string;
+            amount: components["schemas"]["RecipeAmount"];
+            unit: components["schemas"]["UnitMeasurement"];
+            /** @description Ингредиент помечается как «опционально» */
+            optional: boolean;
+        };
+        RecipeInstruction: {
+            /**
+             * @description Шаг приготовления в Markdown. При отображении raw HTML и изображения
+             *     отключены; поддерживаются базовое форматирование, списки и ссылки.
+             */
+            markdown: string;
+        };
+        /** @description Карточка каталога без состава и инструкций */
+        PublishedRecipeSummary: {
+            id: number;
+            title: components["schemas"]["RecipeTitle"];
+            description: components["schemas"]["RecipeDescription"];
+            servings: components["schemas"]["RecipeServings"];
+            prep_time_minutes: components["schemas"]["RecipePrepTimeMinutes"];
+            ingredient_count: number;
+            /** Format: date-time */
+            published_at: string;
+        };
+        RecipeCatalogueResponse: {
+            recipes: components["schemas"]["PublishedRecipeSummary"][];
+            /** @description Opaque token следующей страницы. Пустая строка на последней странице. */
+            nextPageToken: string;
+        };
+        /** @description Полное публичное представление; состав и шаги в заданном порядке */
+        PublishedRecipe: {
+            id: number;
+            title: components["schemas"]["RecipeTitle"];
+            description: components["schemas"]["RecipeDescription"];
+            servings: components["schemas"]["RecipeServings"];
+            prep_time_minutes: components["schemas"]["RecipePrepTimeMinutes"];
+            /** Format: date-time */
+            published_at: string;
+            ingredients: components["schemas"]["RecipeIngredient"][];
+            instructions: components["schemas"]["RecipeInstruction"][];
+        };
+        /** @description Строка admin-списка без состава и инструкций */
+        AdminRecipeSummary: {
+            id: number;
+            title: components["schemas"]["RecipeTitle"];
+            description: components["schemas"]["RecipeDescription"];
+            servings: components["schemas"]["RecipeServings"];
+            prep_time_minutes: components["schemas"]["RecipePrepTimeMinutes"];
+            status: components["schemas"]["RecipeStatus"];
+            /**
+             * Format: date-time
+             * @description Время публикации; `null` для `draft`
+             */
+            published_at: string | null;
+            ingredient_count: number;
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AdminRecipeListResponse: {
+            recipes: components["schemas"]["AdminRecipeSummary"][];
+            /** @description Opaque token следующей страницы. Пустая строка на последней странице. */
+            nextPageToken: string;
+            /** @description Точное количество записей после фильтров, независимо от pageSize/pageToken. */
+            totalSize: number;
+        };
+        /** @description Полное представление рецепта для редактирования */
+        AdminRecipe: {
+            id: number;
+            /** @description Администратор, создавший рецепт; не меняется */
+            author_id: number;
+            title: components["schemas"]["RecipeTitle"];
+            description: components["schemas"]["RecipeDescription"];
+            servings: components["schemas"]["RecipeServings"];
+            prep_time_minutes: components["schemas"]["RecipePrepTimeMinutes"];
+            status: components["schemas"]["RecipeStatus"];
+            /**
+             * Format: date-time
+             * @description Время публикации; `null` для `draft`
+             */
+            published_at: string | null;
+            /** @description Версия для optimistic locking */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            ingredients: components["schemas"]["RecipeIngredient"][];
+            instructions: components["schemas"]["RecipeInstruction"][];
+        };
+        /** @description Порядок состава и шагов задаётся порядком элементов массивов */
+        CreateRecipeRequest: {
+            title: components["schemas"]["RecipeTitle"];
+            /** @default  */
+            description: components["schemas"]["RecipeDescription"];
+            servings?: components["schemas"]["RecipeServings"];
+            prep_time_minutes?: components["schemas"]["RecipePrepTimeMinutes"];
+            /** @default [] */
+            ingredients: components["schemas"]["RecipeIngredientInput"][];
+            /** @default [] */
+            instructions: components["schemas"]["RecipeInstruction"][];
+        };
+        /**
+         * @description Полный снимок рецепта, все поля обязательны.
+         *     Порядок состава и шагов задаётся порядком элементов массивов.
+         */
+        UpdateRecipeRequest: {
+            /** @description Ожидаемая текущая версия записи */
+            version: number;
+            title: components["schemas"]["RecipeTitle"];
+            description: components["schemas"]["RecipeDescription"];
+            servings: components["schemas"]["RecipeServings"];
+            prep_time_minutes: components["schemas"]["RecipePrepTimeMinutes"];
+            status: components["schemas"]["RecipeStatus"];
+            ingredients: components["schemas"]["RecipeIngredientInput"][];
+            instructions: components["schemas"]["RecipeInstruction"][];
         };
     };
     responses: {
@@ -481,6 +758,12 @@ export interface components {
         IngredientTypeFilter: components["schemas"]["IngredientType"];
         /** @description Точное совпадение enum */
         AbvFilter: components["schemas"]["Abv"];
+        /** @description Идентификатор рецепта (положительное целое) */
+        RecipeID: number;
+        /** @description Регистронезависимый поиск по подстроке названия (`ILIKE`), от 2 символов */
+        RecipeTitleFilter: string;
+        /** @description Точное совпадение статуса; без параметра — все статусы */
+        RecipeStatusFilter: components["schemas"]["RecipeStatus"];
     };
     requestBodies: never;
     headers: {
@@ -940,6 +1223,258 @@ export interface operations {
         };
         responses: {
             /** @description Иконка сохранена */
+            204: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listRecipes: {
+        parameters: {
+            query?: {
+                /** @description Размер страницы (1–100). Default — 25. */
+                pageSize?: components["parameters"]["PageSize"];
+                /**
+                 * @description Opaque base64url token следующей страницы.
+                 *     Отвергается (`INVALID_PAGE_TOKEN`), если формат некорректен или
+                 *     sort/order/pageSize не совпадают с параметрами текущего запроса.
+                 */
+                pageToken?: components["parameters"]["PageToken"];
+                /** @description Регистронезависимый поиск по подстроке названия (`ILIKE`), от 2 символов */
+                title?: components["parameters"]["RecipeTitleFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница каталога */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecipeCatalogueResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getRecipe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Идентификатор рецепта (положительное целое) */
+                id: components["parameters"]["RecipeID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Рецепт найден */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishedRecipe"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listAdminRecipes: {
+        parameters: {
+            query?: {
+                /** @description Размер страницы (1–100). Default — 25. */
+                pageSize?: components["parameters"]["PageSize"];
+                /**
+                 * @description Opaque base64url token следующей страницы.
+                 *     Отвергается (`INVALID_PAGE_TOKEN`), если формат некорректен или
+                 *     sort/order/pageSize не совпадают с параметрами текущего запроса.
+                 */
+                pageToken?: components["parameters"]["PageToken"];
+                /** @description Регистронезависимый поиск по подстроке названия (`ILIKE`), от 2 символов */
+                title?: components["parameters"]["RecipeTitleFilter"];
+                /** @description Точное совпадение статуса; без параметра — все статусы */
+                status?: components["parameters"]["RecipeStatusFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница рецептов */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRecipeListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    createRecipe: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description CSRF token для mutating запросов с cookie-сессией.
+                 *     Выпускается сервером (HMAC от session token и часового timestamp),
+                 *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+                 *     Токен принимается в окне жизни сессии (`SESSION_TTL`); cookie Max-Age
+                 *     совпадает с TTL сессии и обновляется на аутентифицированных запросах.
+                 */
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRecipeRequest"];
+            };
+        };
+        responses: {
+            /** @description Черновик создан */
+            201: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRecipe"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getAdminRecipe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Идентификатор рецепта (положительное целое) */
+                id: components["parameters"]["RecipeID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Рецепт найден */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRecipe"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    updateRecipe: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description CSRF token для mutating запросов с cookie-сессией.
+                 *     Выпускается сервером (HMAC от session token и часового timestamp),
+                 *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+                 *     Токен принимается в окне жизни сессии (`SESSION_TTL`); cookie Max-Age
+                 *     совпадает с TTL сессии и обновляется на аутентифицированных запросах.
+                 */
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+            };
+            path: {
+                /** @description Идентификатор рецепта (положительное целое) */
+                id: components["parameters"]["RecipeID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRecipeRequest"];
+            };
+        };
+        responses: {
+            /** @description Рецепт обновлён */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRecipe"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    deleteRecipe: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description CSRF token для mutating запросов с cookie-сессией.
+                 *     Выпускается сервером (HMAC от session token и часового timestamp),
+                 *     отдаётся в CSRF cookie для чтения JS и проверяется по заголовку.
+                 *     Токен принимается в окне жизни сессии (`SESSION_TTL`); cookie Max-Age
+                 *     совпадает с TTL сессии и обновляется на аутентифицированных запросах.
+                 */
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+            };
+            path: {
+                /** @description Идентификатор рецепта (положительное целое) */
+                id: components["parameters"]["RecipeID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Рецепт удалён */
             204: {
                 headers: {
                     "X-Request-ID": components["headers"]["XRequestID"];

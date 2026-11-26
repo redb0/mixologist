@@ -1,3 +1,12 @@
+DROP TABLE IF EXISTS recipe_instructions;
+DROP INDEX IF EXISTS recipe_ingredients_ingredient_id_idx;
+DROP TABLE IF EXISTS recipe_ingredients;
+DROP INDEX IF EXISTS recipes_title_trgm_idx;
+DROP INDEX IF EXISTS recipes_admin_keyset_idx;
+DROP INDEX IF EXISTS recipes_catalogue_keyset_idx;
+DROP TABLE IF EXISTS recipes;
+DROP TYPE IF EXISTS recipe_status_enum;
+
 DROP INDEX IF EXISTS sessions_revoked_at_idx;
 DROP INDEX IF EXISTS sessions_expires_at_idx;
 DROP INDEX IF EXISTS sessions_user_id_idx;

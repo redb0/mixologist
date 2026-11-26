@@ -1,0 +1,107 @@
+version: 3
+workdir: .
+
+allow:
+  depOnAnyVendor: false
+  deepScan: true
+
+excludeFiles:
+  - "^.*_test\\.go$"
+
+exclude:
+  - internal/testutil
+  - internal/contract
+
+vendors:
+  gin:
+    in:
+      - github.com/gin-gonic/gin
+      - github.com/gin-contrib/**
+  sqlx:
+    in: github.com/jmoiron/sqlx
+  pq:
+    in: github.com/lib/pq
+  goth:
+    in: github.com/markbates/goth/**
+  google-idtoken:
+    in: google.golang.org/api/idtoken
+
+components:
+  main:
+    in: cmd/**
+  domain:
+    in: internal/domain
+  models:
+    in: internal/models
+  config:
+    in: internal/config
+  repository:
+    in: internal/repository
+  services:
+    in: internal/services
+  httperr:
+    in: internal/httperr
+  middleware:
+    in: internal/middleware
+  handlers:
+    in: internal/handlers
+  router:
+    in: internal/router
+
+commonComponents:
+  - domain
+
+deps:
+  main:
+    anyProjectDeps: true
+    canUse:
+      - gin
+      - sqlx
+      - pq
+
+  repository:
+    mayDependOn:
+      - models
+    canUse:
+      - sqlx
+      - pq
+
+  # deepScan считает внедрённую через интерфейс реализацию зависимостью,
+  # поэтому связь services -> repository разрешена здесь, а запрет на прямой
+  # импорт пакета repository из services задан в depguard (.golangci.yml).
+  services:
+    mayDependOn:
+      - repository
+    canUse:
+      - google-idtoken
+
+  httperr:
+    canUse:
+      - gin
+
+  middleware:
+    mayDependOn:
+      - config
+      - httperr
+      - services
+    canUse:
+      - gin
+
+  handlers:
+    mayDependOn:
+      - config
+      - httperr
+      - middleware
+      - services
+    canUse:
+      - gin
+      - goth
+
+  router:
+    mayDependOn:
+      - config
+      - handlers
+      - middleware
+      - services
+    canUse:
+      - gin

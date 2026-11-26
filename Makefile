@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help migrate-create migrate-up migrate-down lint lint-go lint-frontend gofmt golangci-lint api-lint api-generate api-check test-backend test-frontend test-contract ci-local
+.PHONY: help migrate-create migrate-up migrate-down lint lint-go lint-frontend gofmt golangci-lint arch-lint api-lint api-generate api-check test-backend test-frontend test-contract ci-local
 
 NAME ?=
 DOWN_STEPS ?= 1
@@ -8,6 +8,7 @@ MIGRATIONS_DIR := ./backend/migrations
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
 GOLANGCI_LINT_VERSION := v2.4.0
+GO_ARCH_LINT_VERSION := v1.19.2
 API_DIR := api
 
 # DB_URL: приоритет — аргумент make (DB_URL=...), иначе переменная окружения;
@@ -37,7 +38,10 @@ help:
 	@echo "      Проверки линтеров backend и frontend (как в CI)."
 	@echo ""
 	@echo "  make lint-go"
-	@echo "      gofmt и golangci-lint для backend."
+	@echo "      gofmt, golangci-lint и go-arch-lint для backend."
+	@echo ""
+	@echo "  make arch-lint"
+	@echo "      Проверка архитектурных зависимостей backend (backend/.go-arch-lint.yml)."
 	@echo ""
 	@echo "  make lint-frontend"
 	@echo "      npm run lint и npm run typecheck для frontend."
@@ -89,7 +93,7 @@ migrate-down:
 
 lint: lint-go lint-frontend
 
-lint-go: gofmt golangci-lint
+lint-go: gofmt golangci-lint arch-lint
 
 gofmt:
 	@cd "$(BACKEND_DIR)" && \
@@ -102,6 +106,10 @@ gofmt:
 
 golangci-lint:
 	cd "$(BACKEND_DIR)" && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
+
+# go-arch-lint требует Go >= 1.26, GOTOOLCHAIN=auto подтягивает нужную версию.
+arch-lint:
+	cd "$(BACKEND_DIR)" && GOTOOLCHAIN=auto go run github.com/fe3dback/go-arch-lint@$(GO_ARCH_LINT_VERSION) check --project-path .
 
 lint-frontend:
 	cd "$(FRONTEND_DIR)" && npm run lint

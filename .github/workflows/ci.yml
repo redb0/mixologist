@@ -64,6 +64,11 @@ jobs:
           version: v2.4.0
           working-directory: backend
 
+      - name: go-arch-lint
+        env:
+          GOTOOLCHAIN: auto
+        run: go run github.com/fe3dback/go-arch-lint@v1.19.2 check --project-path .
+
   frontend-checks:
     name: Frontend lint, test and build
     runs-on: ubuntu-latest

@@ -8,8 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
-	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -125,15 +123,8 @@ func (suite *ContractTestSuite) SetupSuite() {
 		AuthConfig:           suite.authConfig,
 	})
 
-	_, filename, _, _ := runtime.Caller(0)
-	specPath := filepath.Join(filepath.Dir(filename), "../../../api/openapi.yaml")
-	loader := openapi3.NewLoader()
-	doc, err := loader.LoadFromFile(specPath)
-	require.NoError(suite.T(), err)
-	err = doc.Validate(loader.Context)
-	require.NoError(suite.T(), err)
-	suite.doc = doc
-	openapiRouter, err := gorillamux.NewRouter(doc)
+	suite.doc = loadSpec(suite.T())
+	openapiRouter, err := gorillamux.NewRouter(suite.doc)
 	require.NoError(suite.T(), err)
 	suite.openapiRouter = openapiRouter
 }

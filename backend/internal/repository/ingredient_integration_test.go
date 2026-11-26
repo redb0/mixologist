@@ -16,7 +16,7 @@ import (
 type IngredientRepositoryTestSuite struct {
 	suite.Suite
 	pgContainer *testutil.PostgresContainer
-	repository  IngredientRepository
+	repository  *IngredientRepository
 	ctx         context.Context
 }
 

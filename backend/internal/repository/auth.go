@@ -14,40 +14,23 @@ import (
 	"github.com/redb0/mixologist/internal/models"
 )
 
-type UserRepository interface {
-	UpsertGoogleUser(
-		ctx context.Context,
-		identity domain.GoogleIdentity,
-		role domain.UserRole,
-		loginAt time.Time,
-	) (*domain.User, error)
-	GetByID(ctx context.Context, id uint) (*domain.User, error)
-}
-
-type SessionRepository interface {
-	Create(ctx context.Context, session *domain.Session) (*domain.Session, error)
-	GetActiveByTokenHash(ctx context.Context, tokenHash string, now time.Time) (*domain.Session, error)
-	RevokeByTokenHash(ctx context.Context, tokenHash string, revokedAt time.Time) error
-	CleanupExpiredOrRevoked(ctx context.Context, now time.Time) (int64, error)
-}
-
-type userRepository struct {
+type UserRepository struct {
 	db *sqlx.DB
 }
 
-type sessionRepository struct {
+type SessionRepository struct {
 	db *sqlx.DB
 }
 
-func NewUserRepository(db *sqlx.DB) UserRepository {
-	return &userRepository{db: db}
+func NewUserRepository(db *sqlx.DB) *UserRepository {
+	return &UserRepository{db: db}
 }
 
-func NewSessionRepository(db *sqlx.DB) SessionRepository {
-	return &sessionRepository{db: db}
+func NewSessionRepository(db *sqlx.DB) *SessionRepository {
+	return &SessionRepository{db: db}
 }
 
-func (r *userRepository) UpsertGoogleUser(
+func (r *UserRepository) UpsertGoogleUser(
 	ctx context.Context,
 	identity domain.GoogleIdentity,
 	role domain.UserRole,
@@ -84,7 +67,7 @@ func (r *userRepository) UpsertGoogleUser(
 	return toDomainUser(&user), nil
 }
 
-func (r *userRepository) GetByID(ctx context.Context, id uint) (*domain.User, error) {
+func (r *UserRepository) GetByID(ctx context.Context, id uint) (*domain.User, error) {
 	query := `--sql
 		SELECT id, google_subject, email, display_name, avatar_url, role, created_at, updated_at, last_login_at
 		FROM users
@@ -100,7 +83,7 @@ func (r *userRepository) GetByID(ctx context.Context, id uint) (*domain.User, er
 	return toDomainUser(&user), nil
 }
 
-func (r *sessionRepository) Create(ctx context.Context, session *domain.Session) (*domain.Session, error) {
+func (r *SessionRepository) Create(ctx context.Context, session *domain.Session) (*domain.Session, error) {
 	metadata, err := normalizeSessionMetadata(session.Metadata)
 	if err != nil {
 		return nil, err
@@ -133,7 +116,7 @@ func (r *sessionRepository) Create(ctx context.Context, session *domain.Session)
 	return session, nil
 }
 
-func (r *sessionRepository) GetActiveByTokenHash(
+func (r *SessionRepository) GetActiveByTokenHash(
 	ctx context.Context,
 	tokenHash string,
 	now time.Time,
@@ -153,7 +136,7 @@ func (r *sessionRepository) GetActiveByTokenHash(
 	return toDomainSession(&session)
 }
 
-func (r *sessionRepository) RevokeByTokenHash(ctx context.Context, tokenHash string, revokedAt time.Time) error {
+func (r *SessionRepository) RevokeByTokenHash(ctx context.Context, tokenHash string, revokedAt time.Time) error {
 	query := `--sql
 		UPDATE sessions
 		SET revoked_at = $2, updated_at = CURRENT_TIMESTAMP
@@ -173,7 +156,7 @@ func (r *sessionRepository) RevokeByTokenHash(ctx context.Context, tokenHash str
 	return nil
 }
 
-func (r *sessionRepository) CleanupExpiredOrRevoked(ctx context.Context, now time.Time) (int64, error) {
+func (r *SessionRepository) CleanupExpiredOrRevoked(ctx context.Context, now time.Time) (int64, error) {
 	query := `--sql
 		DELETE FROM sessions
 		WHERE expires_at <= $1 OR revoked_at IS NOT NULL

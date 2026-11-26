@@ -29,7 +29,7 @@ import (
 type IngredientHandlerTestSuite struct {
 	suite.Suite
 	pgContainer *testutil.PostgresContainer
-	repository  repository.IngredientRepository
+	repository  *repository.IngredientRepository
 	authService services.AuthService
 	authConfig  config.AuthConfig
 	router      *gin.Engine

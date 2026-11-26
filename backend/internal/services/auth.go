@@ -11,10 +11,26 @@ import (
 	"time"
 
 	"github.com/redb0/mixologist/internal/domain"
-	"github.com/redb0/mixologist/internal/repository"
 )
 
 const sessionTokenSize = 32
+
+type UserRepository interface {
+	UpsertGoogleUser(
+		ctx context.Context,
+		identity domain.GoogleIdentity,
+		role domain.UserRole,
+		loginAt time.Time,
+	) (*domain.User, error)
+	GetByID(ctx context.Context, id uint) (*domain.User, error)
+}
+
+type SessionRepository interface {
+	Create(ctx context.Context, session *domain.Session) (*domain.Session, error)
+	GetActiveByTokenHash(ctx context.Context, tokenHash string, now time.Time) (*domain.Session, error)
+	RevokeByTokenHash(ctx context.Context, tokenHash string, revokedAt time.Time) error
+	CleanupExpiredOrRevoked(ctx context.Context, now time.Time) (int64, error)
+}
 
 type AuthService interface {
 	GoogleIdentityFromIDToken(ctx context.Context, rawIDToken string, expectedNonce string) (domain.GoogleIdentity, error)
@@ -33,16 +49,16 @@ type AuthService interface {
 }
 
 type authService struct {
-	users            repository.UserRepository
-	sessions         repository.SessionRepository
+	users            UserRepository
+	sessions         SessionRepository
 	adminEmails      map[string]struct{}
 	idTokenValidator IDTokenValidator
 	googleClientID   string
 }
 
 func NewAuthService(
-	users repository.UserRepository,
-	sessions repository.SessionRepository,
+	users UserRepository,
+	sessions SessionRepository,
 	adminEmails []string,
 	idTokenValidator IDTokenValidator,
 	googleClientID string,

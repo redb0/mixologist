@@ -16,25 +16,15 @@ var (
 	ErrIngredientAlreadyExists = errors.New("ингредиент уже существует")
 )
 
-type IngredientRepository interface {
-	Create(ctx context.Context, ingredient *domain.Ingredient) (*domain.Ingredient, error)
-	GetByID(ctx context.Context, id uint) (*domain.Ingredient, error)
-	GetIcon(ctx context.Context, id uint) ([]byte, error)
-	Update(ctx context.Context, ingredient *domain.Ingredient) error
-	UpdateIcon(ctx context.Context, id uint, icon []byte) error
-	Delete(ctx context.Context, id uint) error
-	List(ctx context.Context, params domain.IngredientListParams, keyset *domain.IngredientListCursor) (domain.IngredientPage, bool, error)
-}
-
-type ingredientRepository struct {
+type IngredientRepository struct {
 	db *sqlx.DB
 }
 
-func NewIngredientRepository(db *sqlx.DB) IngredientRepository {
-	return &ingredientRepository{db: db}
+func NewIngredientRepository(db *sqlx.DB) *IngredientRepository {
+	return &IngredientRepository{db: db}
 }
 
-func (r *ingredientRepository) Create(ctx context.Context, ingredient *domain.Ingredient) (*domain.Ingredient, error) {
+func (r *IngredientRepository) Create(ctx context.Context, ingredient *domain.Ingredient) (*domain.Ingredient, error) {
 	query := `--sql
 		INSERT INTO ingredients (name, description, unit_measurement, abv, ingredient_type, icon)
 		VALUES ($1, $2, $3, $4, $5, $6)
@@ -58,7 +48,7 @@ func (r *ingredientRepository) Create(ctx context.Context, ingredient *domain.In
 	return ingredient, nil
 }
 
-func (r *ingredientRepository) GetByID(ctx context.Context, id uint) (*domain.Ingredient, error) {
+func (r *IngredientRepository) GetByID(ctx context.Context, id uint) (*domain.Ingredient, error) {
 	query := `--sql
 		SELECT
 			id,
@@ -91,7 +81,7 @@ func (r *ingredientRepository) GetByID(ctx context.Context, id uint) (*domain.In
 	return ingredientDomain, nil
 }
 
-func (r *ingredientRepository) GetIcon(ctx context.Context, id uint) ([]byte, error) {
+func (r *IngredientRepository) GetIcon(ctx context.Context, id uint) ([]byte, error) {
 	var icon []byte
 	err := r.db.GetContext(ctx, &icon, `SELECT icon FROM ingredients WHERE id = $1`, id)
 	if err != nil {
@@ -106,7 +96,7 @@ func (r *ingredientRepository) GetIcon(ctx context.Context, id uint) ([]byte, er
 	return icon, nil
 }
 
-func (r *ingredientRepository) Update(ctx context.Context, ingredient *domain.Ingredient) error {
+func (r *IngredientRepository) Update(ctx context.Context, ingredient *domain.Ingredient) error {
 	query := `--sql
 		UPDATE ingredients
 		SET
@@ -152,7 +142,7 @@ func (r *ingredientRepository) Update(ctx context.Context, ingredient *domain.In
 	return rows.Err()
 }
 
-func (r *ingredientRepository) UpdateIcon(ctx context.Context, id uint, icon []byte) error {
+func (r *IngredientRepository) UpdateIcon(ctx context.Context, id uint, icon []byte) error {
 	query := `--sql
 		UPDATE ingredients
 		SET icon = $1
@@ -172,7 +162,7 @@ func (r *ingredientRepository) UpdateIcon(ctx context.Context, id uint, icon []b
 	return nil
 }
 
-func (r *ingredientRepository) Delete(ctx context.Context, id uint) error {
+func (r *IngredientRepository) Delete(ctx context.Context, id uint) error {
 	query := `--sql
 		DELETE FROM ingredients
 		WHERE id = :id
@@ -191,7 +181,7 @@ func (r *ingredientRepository) Delete(ctx context.Context, id uint) error {
 	return nil
 }
 
-func (r *ingredientRepository) List(
+func (r *IngredientRepository) List(
 	ctx context.Context,
 	params domain.IngredientListParams,
 	keyset *domain.IngredientListCursor,

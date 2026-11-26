@@ -15,8 +15,8 @@ import (
 type AuthRepositoryTestSuite struct {
 	suite.Suite
 	pgContainer *testutil.PostgresContainer
-	users       UserRepository
-	sessions    SessionRepository
+	users       *UserRepository
+	sessions    *SessionRepository
 	ctx         context.Context
 }
 

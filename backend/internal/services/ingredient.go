@@ -7,10 +7,19 @@ import (
 	"net/http"
 
 	"github.com/redb0/mixologist/internal/domain"
-	"github.com/redb0/mixologist/internal/repository"
 )
 
 const MaxIconSize = 512 * 1024 // 512 KB
+
+type IngredientRepository interface {
+	Create(ctx context.Context, ingredient *domain.Ingredient) (*domain.Ingredient, error)
+	GetByID(ctx context.Context, id uint) (*domain.Ingredient, error)
+	GetIcon(ctx context.Context, id uint) ([]byte, error)
+	Update(ctx context.Context, ingredient *domain.Ingredient) error
+	UpdateIcon(ctx context.Context, id uint, icon []byte) error
+	Delete(ctx context.Context, id uint) error
+	List(ctx context.Context, params domain.IngredientListParams, keyset *domain.IngredientListCursor) (domain.IngredientPage, bool, error)
+}
 
 type UpdateIngredientPatch struct {
 	ExpectedVersion int
@@ -39,7 +48,7 @@ type IngredientService interface {
 }
 
 type ingredientService struct {
-	repo repository.IngredientRepository
+	repo IngredientRepository
 }
 
 func (s *ingredientService) GetByID(ctx context.Context, id uint) (*domain.Ingredient, error) {
@@ -180,6 +189,6 @@ func (s *ingredientService) validateIngredient(ingredient *domain.Ingredient) er
 	return nil
 }
 
-func NewIngredientService(repo repository.IngredientRepository) IngredientService {
+func NewIngredientService(repo IngredientRepository) IngredientService {
 	return &ingredientService{repo: repo}
 }

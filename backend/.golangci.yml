@@ -5,3 +5,14 @@ run:
 
 linters:
   default: standard
+  enable:
+    - depguard
+  settings:
+    depguard:
+      rules:
+        services-without-repository:
+          files:
+            - "**/internal/services/**"
+          deny:
+            - pkg: github.com/redb0/mixologist/internal/repository
+              desc: интерфейсы репозиториев объявляются в services, реализацию внедряет cmd/api
